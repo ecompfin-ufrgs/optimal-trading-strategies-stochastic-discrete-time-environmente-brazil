@@ -1,0 +1,1 @@
+# optimal-trading-strategies-stochastic-discrete-time-environmente-brazil
