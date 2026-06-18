@@ -23,9 +23,9 @@ isto é, grandezas que você quer quer o software calcule.-->
 
 ## Requisitos não funcionais
 
-- Requisito NF1 - O tempo de execução de cada algoritmo não pode superar 30 segundos.
+- Requisito NF1 - O tempo de execução de cada algoritmo não pode superar 60 segundos.
 - Requisito NF2 - a aplicação deve ser executada na Web (acesso via navegador)
-- Requisito NF3 - rodar em Windows, Linux e macOS (o servidor deve subir nos três)
+- Requisito NF3 - a aplicação também deve poder ser executada em Windows (o servidor deve subir nos três)
 - Requisito NF4 - reprodutibilidade: mesma seed + mesmos dados → resultado idêntico
 - Requisito NF5 - arquitetura pipes-and-filter + separação POO (estado) / funcional puro (matemática), com a camada web sobre o módulo principal
 - Requisito NF6 - persistência dos dados em SQLite via DAL
