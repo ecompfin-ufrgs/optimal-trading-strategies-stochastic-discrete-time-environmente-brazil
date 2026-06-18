@@ -3,7 +3,7 @@
 ## Projeto de dados
 
 ## Projeto de arquiitetura
-A aplicação usa  modelo arquitetural "pipes and filters".
+A aplicação usa  modelo arquitetural misto: "pipes and filters" para o pipeline de dados e MVC para a camada de apresentação.
 
 <!--Liste os módulos e pacotes e apresente uma figura com a estrutura que os liga-->
 
