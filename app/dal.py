@@ -41,8 +41,8 @@ def baixar_precos(
     Notes
     -----
     Usa a *chart API* pública do Yahoo via ``urllib`` (stdlib) — **sem**
-    ``yfinance``/``curl_cffi``, que sofriam de erro de certificado SSL no
-    Windows. Imports tardios mantêm os testes de banco/retorno offline (NF4).
+    ``yfinance``/``curl_cffi``. Imports tardios mantêm os testes de 
+    banco/retorno offline (NF4).
     """
     pass
 
