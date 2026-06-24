@@ -1,11 +1,11 @@
 """Ponto de entrada do pacote: ``python -m app``.
 
-Roda a esteira completa (``app.principal.executar_pipeline``) num exemplo
-autocontido e imprime o resultado. Serve para conferir que a aplicação roda de
+Roda a esteira completa (``app.principal.executar_pipeline``)
+e imprime o resultado. Serve para conferir que a aplicação roda de
 ponta a ponta sem a camada web.
 
 Em uso real, os retornos vêm do SQLite populado pela DAL (a partir do Yahoo
-Finance); aqui geramos uma série sintética para a demonstração ser offline e
+Finance); aqui foi gerado uma série sintética para a demonstração ser offline e
 reprodutível.
 """
 
