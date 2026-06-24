@@ -5,9 +5,6 @@ Implementa a **Etapa 0 (calibração)** do artigo: a partir dos retornos
 históricos, fornece os insumos exógenos do modelo — R_f (renda fixa) e
 (μ̂, Σ̂) + amostragem Monte Carlo (renda variável).
 
-As convenções numéricas (conversão composta do rf, covariância amostral
-não-viesada, geração de cenários Normal por Cholesky e Student-t com matriz de
-escala) são as mesmas do `dp-optimize` de referência, que já está validado.
 A matemática de otimização (α*, A_t, …) fica em ``app.nucleo``.
 """
 
