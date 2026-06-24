@@ -121,7 +121,7 @@ Adota-se a separação de paradigmas (NF5):
 | `app.agente` | indivíduo: classe `Investidor` (γ, β, W₀, T, CRRA) | F5, F6, F8, F9 |
 | `app.nucleo` | funções puras com a matemática do modelo | F6–F11 |
 | `app.principal` | **orquestrador** da esteira pipes-and-filters | F10, NF5 |
-| `app.__main__` | ponto de entrada `python -m app` (usa o banco real se existir) | NF5 |
+| `app.__main__` | ponto de entrada `python -m app` | NF5 |
 | `web` (à parte) | interface web sobre o módulo principal | F15, F16, NF2 |
 
 ### Figura — esteira do pipeline
