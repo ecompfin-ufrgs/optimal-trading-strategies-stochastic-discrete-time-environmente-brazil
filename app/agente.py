@@ -79,12 +79,10 @@ class Investidor:
         """
         ...
 
-    @property
     def alpha_star(self) -> np.ndarray | None:
         """Última carteira ótima α* calculada."""
         ...
 
-    @property
     def phi_hat(self) -> float | None:
         """Valor de Φ̂ associado à última solução ótima."""
         ...
