@@ -52,8 +52,6 @@ def main() -> None:
 
     Executa:
       - montagem do banco via ``montar_base``
-      - logs simples no stdout
-      - tratamento amigável de erro (ex: SSL, internet)
     """
     ...
 
