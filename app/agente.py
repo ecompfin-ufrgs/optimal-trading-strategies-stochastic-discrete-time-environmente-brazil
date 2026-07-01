@@ -52,12 +52,10 @@ class Investidor:
         self,
         mercado: RendaVariavel,
         rf: float,
-        *,
         n_scenarios: int = 100_000,
         distribuicao: str = "normal",
         nu: float | None = None,
         seed: int | None = 42,
-        **opts,
     ) -> np.ndarray:
         """Calcula a carteira ótima α* via FOC G(α*) = 0. (F6)
 
