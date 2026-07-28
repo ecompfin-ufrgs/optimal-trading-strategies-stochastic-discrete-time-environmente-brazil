@@ -102,12 +102,35 @@ def funcao_valor(A, W, gamma):
 
 
 def propagar_riqueza(w0, theta, alpha, R, rf):
-    """Forward pass da dinâmica de riqueza. (F9–F10)
+    """Forward pass (Etapas 5–6): consome c_t=θ_t·W_t, investe a poupança em α*
+    e propaga W_{t+1}=S_t·R_p. (F9, F10)
 
-    Simula:
-      c_t = θ_t W_t
-      W_{t+1} = (W_t − c_t) · R_p(α, R_t)
+    Parameters
+    ----------
+    w0 : riqueza inicial W₀.
+    theta : (T+1,) frações de consumo θ_t.
+    alpha : (N,) carteira ótima α*.
+    R : (n_paths, T, N) retornos brutos amostrados (um por período e caminho).
+    rf : fator livre de risco bruto.
 
-    Retorna trajetórias de W, consumo e poupança.
+    Returns
+    -------
+    dict com ``W``, ``c``, ``S`` — cada um shape (n_paths, T+1).
     """
-    ...
+    R = np.asarray(R, dtype=float)
+    alpha = np.asarray(alpha, dtype=float)
+    theta = np.asarray(theta, dtype=float)
+    n_paths, T, _ = R.shape
+    W = np.empty((n_paths, T + 1))
+    c = np.empty((n_paths, T + 1))
+    S = np.empty((n_paths, T + 1))
+    W[:, 0] = w0
+    for t in range(T):
+        c[:, t] = theta[t] * W[:, t]
+        S[:, t] = W[:, t] - c[:, t]
+        R_p = rf + (R[:, t, :] - rf) @ alpha           # (n_paths,)
+        W[:, t + 1] = S[:, t] * R_p
+    # Condição terminal: consome toda a riqueza (θ_T = 1).
+    c[:, T] = theta[T] * W[:, T]
+    S[:, T] = W[:, T] - c[:, T]
+    return {"W": W, "c": c, "S": S}
