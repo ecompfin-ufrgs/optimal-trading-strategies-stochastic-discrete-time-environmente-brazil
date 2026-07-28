@@ -121,7 +121,7 @@ Adota-se a separação de paradigmas (NF5):
 | `app.agente` | indivíduo: classe `Investidor` (γ, β, W₀, T, CRRA) | F5, F6, F8, F9 |
 | `app.nucleo` | funções puras com a matemática do modelo | F6–F11 |
 | `app.principal` | **orquestrador** da esteira pipes-and-filters | F10, NF5 |
-| `app.__main__` | ponto de entrada `python -m app` | NF5 |
+| `app.__main__` | ponto de entrada `python -m app` (usa o banco real se existir) | NF5 |
 | `web` (à parte) | interface web sobre o módulo principal | F15, F16, NF2 |
 
 ### Figura — esteira do pipeline
@@ -224,8 +224,8 @@ class RendaVariavel:
         """Vetor de retornos esperados estimado μ̂. (F2, F4)"""
     def covariancia(self) -> "ndarray":
         """Matriz de covariância estimada Σ̂. (F2, F4)"""
-    def amostrar(self, n: int, distribuicao: str = "normal") -> "ndarray":
-        """Gera n cenários de retorno R ~ (μ̂, Σ̂) para o Monte Carlo."""
+    def amostrar(self, n: int, seed: int | None = None) -> "ndarray":
+        """Gera n cenários de retorno R ~ Normal(μ̂, Σ̂) para o Monte Carlo."""
 ```
 
 ### `app.agente` — Indivíduo / Investidor (F5, F6, F8, F9)
@@ -243,8 +243,7 @@ class Investidor:
         """u'(c) = c^(−γ). (F5)"""
     def carteira_otima(self, mercado: "RendaVariavel", rf: float,
                        **opts) -> "ndarray":
-        """Carteira ótima α* via FOC G(α*)=0; sem restrição por padrão.
-        Repassa allow_short/allow_leverage/alpha_max ao núcleo. (F6)"""
+        """Carteira ótima α* via FOC G(α*)=0; α sempre irrestrito. (F6)"""
     def fracoes_consumo(self) -> "ndarray":
         """Frações de consumo θ_t = A_t^(−1/γ), t=0..T. (F8, F9)"""
 ```
@@ -257,9 +256,8 @@ Sem estado. Cada função implementa uma equação do artigo e é testável isol
 def funcao_foc(alpha, R, rf, gamma):
     """G(α) = E[(R − rf·1)/(rf + αᵀ(R − rf·1))^γ]. (F6)"""
 
-def resolver_alpha_otimo(R, rf, gamma, *, allow_short=True,
-                         allow_leverage=True, alpha_max=np.inf):
-    """Resolve G(α*)=0 — α ∈ ℝ^N irrestrito por padrão (ver nota abaixo);
+def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
+    """Resolve G(α*)=0 — α ∈ ℝ^N irrestrito (ver nota abaixo);
     SLSQP para N≥2, brentq para N=1. (F6)"""
 
 def phi_chapeu(alpha, R, rf, gamma):
@@ -278,7 +276,7 @@ def funcao_valor(A, W, gamma):
     """V_t(W) = A_t·W^(1−γ)/(1−γ). (F11)"""
 ```
 
-> **Restrição sobre os pesos α (domínio).** `resolver_alpha_otimo` é **irrestrito por padrão**: `α ∈ ℝ^N`, admitindo **short** (α<0) e **alavancagem** (Σα>1). Os flags `allow_short=False`, `allow_leverage=False` e `alpha_max` impõem long-only/limites quando desejado.
+> **Restrição sobre os pesos α (domínio).** `resolver_alpha_otimo` é **sempre irrestrito**: `α ∈ ℝ^N`, admitindo **short** (α<0) e **alavancagem** (Σα>1), sem teto `α_max`. Não há como impor long-only ou limites — o domínio irrestrito é o do artigo (§3.1). Para N=1 o `brentq` parte do bracket `[−20, 20]` e o duplica até haver troca de sinal de G; se não houver (arbitragem na amostra, isto é, nenhum cenário com R < R_f), não existe α* finito e a função levanta `RuntimeError`.
 
 ### `app.principal` — Orquestrador (F10, NF5)
 
@@ -309,7 +307,7 @@ Vive em projeto separado. A separação MVC permite trocar a interface (web ou o
 > **Estado:** os algoritmos das Etapas 0–6 estão **implementados e testados** (tarefas 4–7, um notebook por requisito em `tests/`). A integração com o QuantEcon (tarefa 8) e o pseudocódigo detalhado ficam para depois.
 
 1. **Calibração (Etapa 0)** — `media`/`covariancia`: estimadores amostrais de μ̂ e Σ̂ sobre os retornos; R_f vem do CDI.
-2. **Carteira ótima α\* (Etapa 1)** — `resolver_alpha_otimo`: maximiza J(α)=E[u(R_p)] resolvendo a FOC `G(α)=0`, com `G`/J avaliados por **Monte Carlo** sobre cenários R ~ (μ̂, Σ̂). **α irrestrito por padrão** (short e alavancagem; §3.1). Resolvida **uma única vez** (miopia).
+2. **Carteira ótima α\* (Etapa 1)** — `resolver_alpha_otimo`: maximiza J(α)=E[u(R_p)] resolvendo a FOC `G(α)=0` via **SLSQP** (N≥2) ou **brentq** (N=1), com `G`/J avaliados por **Monte Carlo** sobre cenários R ~ Normal(μ̂, Σ̂). **α sempre irrestrito** (short e alavancagem, sem teto;). Resolvida **uma única vez** (miopia).
 3. **Φ̂ (Etapa 2)** — `phi_chapeu`: esperança `E[R_p^(1−γ)]` do portfólio ótimo, calculada **uma vez** e reutilizada.
 4. **Coeficientes A_t e frações θ_t (Etapas 3–4)** — `recorrencia_A` / `fracoes_consumo`: **indução retroativa** de `t=T` até `t=0` (backward pass), puramente algébrica, sem otimização.
 5. **Simulação forward (Etapas 5–6)** — `propagar_riqueza`: a cada t consome `c_t*=θ_t·W_t`, investe a poupança em α* e propaga a riqueza (forward pass).
