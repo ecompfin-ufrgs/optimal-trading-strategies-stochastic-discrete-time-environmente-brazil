@@ -94,11 +94,11 @@ def fracoes_consumo(A, gamma):
 
 
 def funcao_valor(A, W, gamma):
-    """V_t(W) = A_t·u(W). (F11)
-
-    Função valor fechada da solução CRRA.
-    """
-    ...
+    """V_t(W) = A_t·W^(1−γ)/(1−γ) (γ≠1) ou A_t·ln(W) (γ=1). (F11)"""
+    A = np.asarray(A, dtype=float)
+    if np.isclose(gamma, 1.0):
+        return A * np.log(W)
+    return A * W ** (1.0 - gamma) / (1.0 - gamma)
 
 
 def propagar_riqueza(w0, theta, alpha, R, rf):
