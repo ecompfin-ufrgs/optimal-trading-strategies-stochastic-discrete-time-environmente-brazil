@@ -70,16 +70,27 @@ def phi_chapeu(alpha, R, rf, gamma):
 
 
 def recorrencia_A(phi, beta, gamma, T):
-    """A_T = 1; A_t = f(A_{t+1}, β, Φ̂, γ). (F8)
-
-    Gera sequência backward para horizonte T.
-    """
-    ...
+    """A_T=1; A_t=[1 + (β·A_{t+1}·Φ̂)^(1/γ)]^γ, t=T−1..0. Shape (T+1,). (F8)"""
+    A = np.empty(T + 1)
+    if np.isclose(gamma, 1.0):
+        # Limite log: A_t = (1−β^{T−t+1})/(1−β) — independe de Φ̂.
+        for t in range(T + 1):
+            A[t] = (T - t + 1) if np.isclose(beta, 1.0) else (1 - beta ** (T - t + 1)) / (1 - beta)
+        return A
+    A[T] = 1.0
+    inv_g = 1.0 / gamma
+    for t in range(T - 1, -1, -1):
+        inner = beta * A[t + 1] * phi
+        A[t] = (1.0 + inner ** inv_g) ** gamma if inner > 0 else 1.0
+    return A
 
 
 def fracoes_consumo(A, gamma):
-    """θ_t = A_t^(−1/γ). (F8)"""
-    ...
+    """θ_t = A_t^(−1/γ) (ou 1/A_t se γ=1). (F8)"""
+    A = np.asarray(A, dtype=float)
+    if np.isclose(gamma, 1.0):
+        return 1.0 / A
+    return A ** (-1.0 / gamma)
 
 
 def funcao_valor(A, W, gamma):
