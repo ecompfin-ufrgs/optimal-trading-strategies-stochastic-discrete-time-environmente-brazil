@@ -7,17 +7,18 @@ da Seção 3.5.1 (NF5).
 **Convenção — fatores brutos.** R e rf são *fatores* de retorno bruto
 (ex.: 1.02, 1.008), de modo que o retorno bruto do portfólio é
 
-    R_p = rf + αᵀ(R − rf·1)
+    R_p = rf + αᵀ(R − rf·1)            e o excesso é (R − rf·1).
 
-O agente converte retornos líquidos em fatores brutos e aplica
-responsabilidade limitada (R ≥ 0) antes de chamar estas funções.
+O agente converte os retornos *líquidos* do mercado (r, rf_líq) em brutos
+(1+r, 1+rf_líq) e aplica a **responsabilidade limitada** (R ≥ 0) antes de
+chamar estas funções (ver ``app.agente``).
 """
-
-from __future__ import annotations
 
 import numpy as np
 from scipy import optimize
 
+# Piso numérico de R_p (rede de segurança) — evita R_p ≤ 0 nas potências.
+_TOL_FALENCIA = 1e-12
 
 def funcao_foc(alpha, R, rf, gamma):
     """G(α) = E[(R − rf·1) / R_p^γ], com R_p = rf + αᵀ(R − rf·1). (F6)
@@ -59,11 +60,13 @@ def resolver_alpha_otimo(
 
 
 def phi_chapeu(alpha, R, rf, gamma):
-    """Φ̂ = E[u(R_p)] ou equivalente do modelo. (F7)
-
-    Estatística da política ótima usada na dinâmica intertemporal.
-    """
-    ...
+    """Φ̂ = E[R_p^(1−γ)] do portfólio ótimo (ou E[ln R_p] se γ=1). (F7)"""
+    alpha = np.asarray(alpha, dtype=float)
+    excesso = R - rf
+    R_p = np.maximum(rf + excesso @ alpha, _TOL_FALENCIA)
+    if np.isclose(gamma, 1.0):
+        return float(np.mean(np.log(R_p)))
+    return float(np.mean(R_p ** (1.0 - gamma)))
 
 
 def recorrencia_A(phi, beta, gamma, T):
