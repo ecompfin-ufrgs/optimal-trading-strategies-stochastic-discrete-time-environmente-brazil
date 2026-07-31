@@ -20,43 +20,71 @@ from scipy import optimize
 # Piso numérico de R_p (rede de segurança) — evita R_p ≤ 0 nas potências.
 _TOL_FALENCIA = 1e-12
 
-def funcao_foc(alpha, R, rf, gamma):
-    """G(α) = E[(R − rf·1) / R_p^γ], com R_p = rf + αᵀ(R − rf·1). (F6)
+# Bracket inicial do brentq (N=1). |α*| real « 20 para dados mensais; se não
+# houver troca de sinal de G, o bracket é duplicado até _MAX_EXPANSOES vezes.
+_BRACKET_INICIAL = 20.0
+_MAX_EXPANSOES = 8
 
-    Retorna vetor gradiente da condição de primeira ordem.
-    """
-    ...
+
+def funcao_foc(alpha, R, rf, gamma):
+    """G(α) = E[(R − rf·1) / R_p^γ], com R_p = rf + αᵀ(R − rf·1). Shape (N,). (F6)"""
+    alpha = np.asarray(alpha, dtype=float)
+    excesso = R - rf                                    # (n, N)
+    R_p = np.maximum(rf + excesso @ alpha, _TOL_FALENCIA)  # (n,)
+    pesos = R_p ** (-gamma)
+    return (excesso.T @ pesos) / R.shape[0]
 
 
 def _objetivo_J(alpha, R, rf, gamma):
-    """J(α) = E[u(R_p(α))].
+    """J(α) = E[u(R_p(α))] — maximizado pelo solver (dJ/dα = G)."""
+    excesso = R - rf
+    R_p = np.maximum(rf + excesso @ alpha, _TOL_FALENCIA)
+    if np.isclose(gamma, 1.0):
+        u = np.log(R_p)
+    else:
+        u = R_p ** (1.0 - gamma) / (1.0 - gamma)
+    return float(u.mean())
 
-    Função objetivo cujo gradiente é a FOC G(α).
+
+def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
+    """Resolve a FOC G(α*)=0 maximizando J(α). (F6)
+
+    **Fiel ao artigo: α ∈ ℝ^N, SEM restrição alguma** — venda a descoberto
+    (α<0) e alavancagem (Σα>1) são sempre admitidas, e não há teto |α| ≤ α_max.
+    N ≥ 2 → SLSQP irrestrito; N = 1 → brentq com bracket auto-expansível.
+
+    α* finito existe porque J é côncava e G(α) é decrescente: basta que a
+    amostra contenha algum cenário com R < rf e algum com R > rf (sempre o caso
+    com retornos Normais). Se isso falhar — arbitragem na amostra — não há
+    ótimo interior e a função levanta ``RuntimeError`` em vez de devolver um
+    valor de canto arbitrário.
     """
-    ...
+    R = np.asarray(R, dtype=float)
+    N = R.shape[1]
+    if alpha0 is None:
+        alpha0 = np.full(N, 1.0 / N)
 
+    if N >= 2:
+        res = optimize.minimize(
+            lambda a: -_objetivo_J(a, R, rf, gamma), np.asarray(alpha0, float),
+            jac=lambda a: -funcao_foc(a, R, rf, gamma),
+            method="SLSQP",
+            options={"ftol": tol, "maxiter": int(maxiter), "disp": False})
+        return res.x.copy()
 
-def resolver_alpha_otimo(
-    R,
-    rf,
-    gamma,
-    *,
-    allow_short: bool = True,
-    allow_leverage: bool = True,
-    alpha_max=np.inf,
-    tol: float = 1e-10,
-    maxiter: int = 200,
-    alpha0=None,
-):
-    """Resolve a FOC G(α*) = 0 via otimização numérica. (F6)
-
-    Casos:
-      - N ≥ 2 → SLSQP
-      - N = 1 → Brent (root-finding com KKT implícito)
-
-    Por padrão permite solução irrestrita (short + leverage).
-    """
-    ...
+    # N == 1 — brentq. G decresce em α: procura-se G(lo) > 0 > G(hi).
+    g = lambda a: float(funcao_foc(np.array([a]), R, rf, gamma)[0])
+    lo = -_BRACKET_INICIAL
+    hi = _BRACKET_INICIAL
+    for _ in range(_MAX_EXPANSOES):
+        if g(lo) > 0 > g(hi):
+            return np.array([optimize.brentq(g, lo, hi, xtol=tol)])
+        lo *= 2.0
+        hi *= 2.0
+    raise RuntimeError(
+        f"FOC sem troca de sinal em α ∈ [{lo / 2:.0f}, {hi / 2:.0f}]: não há α* "
+        "finito. Verifique se a amostra de R contém cenários acima e abaixo de rf."
+    )
 
 
 def phi_chapeu(alpha, R, rf, gamma):
