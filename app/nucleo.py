@@ -52,12 +52,6 @@ def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
     **Fiel ao artigo: α ∈ ℝ^N, SEM restrição alguma** — venda a descoberto
     (α<0) e alavancagem (Σα>1) são sempre admitidas, e não há teto |α| ≤ α_max.
     N ≥ 2 → SLSQP irrestrito; N = 1 → brentq com bracket auto-expansível.
-
-    α* finito existe porque J é côncava e G(α) é decrescente: basta que a
-    amostra contenha algum cenário com R < rf e algum com R > rf (sempre o caso
-    com retornos Normais). Se isso falhar — arbitragem na amostra — não há
-    ótimo interior e a função levanta ``RuntimeError`` em vez de devolver um
-    valor de canto arbitrário.
     """
     R = np.asarray(R, dtype=float)
     N = R.shape[1]
@@ -83,7 +77,7 @@ def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
         hi *= 2.0
     raise RuntimeError(
         f"FOC sem troca de sinal em α ∈ [{lo / 2:.0f}, {hi / 2:.0f}]: não há α* "
-        "finito. Verifique se a amostra de R contém cenários acima e abaixo de rf."
+        "finito."
     )
 
 
