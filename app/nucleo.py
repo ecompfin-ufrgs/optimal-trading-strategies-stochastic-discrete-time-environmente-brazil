@@ -1,8 +1,7 @@
 """app.nucleo — funções puras com a matemática do modelo (Samuelson 1969).
 
 Sem estado: cada função implementa uma equação do artigo e é testável
-isoladamente (F6–F11). Metade "funcional pura" da separação de paradigmas
-da Seção 3.5.1 (NF5).
+isoladamente (F6–F11). Metade "funcional pura" da separação de paradigmas (NF5).
 
 **Convenção — fatores brutos.** R e rf são *fatores* de retorno bruto
 (ex.: 1.02, 1.008), de modo que o retorno bruto do portfólio é
@@ -53,6 +52,7 @@ def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
     (α<0) e alavancagem (Σα>1) são sempre admitidas, e não há teto |α| ≤ α_max.
     N ≥ 2 → SLSQP irrestrito; N = 1 → brentq com bracket auto-expansível.
     """
+    
     R = np.asarray(R, dtype=float)
     N = R.shape[1]
     if alpha0 is None:
@@ -77,7 +77,7 @@ def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
         hi *= 2.0
     raise RuntimeError(
         f"FOC sem troca de sinal em α ∈ [{lo / 2:.0f}, {hi / 2:.0f}]: não há α* "
-        "finito."
+        "finito. Verifique se a amostra de R contém cenários acima e abaixo de rf."
     )
 
 
