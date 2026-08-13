@@ -6,17 +6,17 @@
 
 ### Fontes
 
-Duas séries históricas mensais, uma por mercado:
+Duas séries históricas, uma por mercado, em frequência **mensal** (default) ou **diária**:
 
 - **Renda variável** — Ibovespa (`^BVSP`), nível do índice, obtido do Yahoo Finance (chart API pública, via `urllib`).
-- **Renda fixa** — CDI, taxa mensal (a taxa livre de risco `R_f`), da API do Banco Central (SGS, série 4391).
+- **Renda fixa** — CDI (a taxa livre de risco `R_f`), da API do Banco Central: série SGS **4391** (acumulada no mês, % a.m.) no mensal, série **12** (% a.d.) no diário.
 
 ### Fluxo (transformação) dos dados
 
-O sistema começa obtendo os **dados brutos** do Ibovespa e do CDI. Em seguida, esses dados são transformados em **retornos mensais**, que mostram quanto cada mercado ganhou ou perdeu em cada período. A partir desses retornos, o sistema calcula os **parâmetros estatísticos** necessários para o modelo, como retorno esperado, risco etc. Por fim, esses parâmetros são usados para gerar as **trajetórias simuladas** de riqueza e consumo do investidor ao longo do tempo, produzindo os resultados finais da aplicação. A informação muda de forma ao longo da esteira:
+O sistema começa obtendo os **dados brutos** do Ibovespa e do CDI. Em seguida, esses dados são transformados em **retornos por período**, que mostram quanto cada mercado ganhou ou perdeu em cada período (mês ou dia, conforme a frequência da ingestão). A partir desses retornos, o sistema calcula os **parâmetros estatísticos** necessários para o modelo, como retorno esperado, risco etc. Por fim, esses parâmetros são usados para gerar as **trajetórias simuladas** de riqueza e consumo do investidor ao longo do tempo, produzindo os resultados finais da aplicação. A informação muda de forma ao longo da esteira:
 
 ```
-   dados brutos            retornos mensais          parâmetros           trajetórias
+   dados brutos          retornos por período        parâmetros           trajetórias
  (ibovespa, cdi)       →      (retornos)       →    (parametros)    →    (em memória)
                                                                           [resultado]
 ```
@@ -63,13 +63,15 @@ Optou-se por **uma tabela de dados brutos por mercado** e uma tabela de **retorn
 
 | Tabela | Campo | Tipo | Restrições | Descrição | Exemplo |
 |---|---|---|---|---|---|
-| `ibovespa` | `data` | TEXT | PK, `AAAA-MM`, não nulo | mês da observação | `2000-01` |
+| `ibovespa` | `data` | TEXT | PK, `AAAA-MM`\|`AAAA-MM-DD`, não nulo | período da observação | `2000-01` |
 | `ibovespa` | `fechamento` | REAL | > 0, não nulo | nível do índice (pontos) | `17092.0` |
-| `cdi` | `data` | TEXT | PK, `AAAA-MM`, não nulo | mês da observação | `2000-01` |
-| `cdi` | `cdi` | REAL | ≥ 0, não nulo | taxa CDI do mês (decimal) = `R_f` | `0.0149` |
-| `retornos` | `data` | TEXT | PK, `AAAA-MM`, não nulo | mês da observação | `2000-02` |
-| `retornos` | `ibov` | REAL | não nulo | retorno mensal do Ibovespa (decimal) | `-0.0315` |
-| `retornos` | `cdi` | REAL | não nulo | retorno livre de risco do mês (decimal) | `0.0149` |
+| `cdi` | `data` | TEXT | PK, `AAAA-MM`\|`AAAA-MM-DD`, não nulo | período da observação | `2000-01` |
+| `cdi` | `cdi` | REAL | ≥ 0, não nulo | taxa CDI do período (decimal) = `R_f` | `0.0149` |
+| `retornos` | `data` | TEXT | PK, `AAAA-MM`\|`AAAA-MM-DD`, não nulo | período da observação | `2000-02` |
+| `retornos` | `ibov` | REAL | não nulo | retorno do Ibovespa no período (decimal) | `-0.0315` |
+| `retornos` | `cdi` | REAL | não nulo | retorno livre de risco do período (decimal) | `0.0149` |
+
+> A granularidade da coluna `data` acompanha a frequência da ingestão: `AAAA-MM` no mensal (default), `AAAA-MM-DD` no diário. As duas frequências vivem em bancos separados, nunca na mesma tabela.
 | `parametros` | `chave` | TEXT | PK, não nulo | nome do parâmetro calibrado | `mu_ibov` |
 | `parametros` | `valor` | REAL | não nulo | valor do parâmetro | `0.0107` |
 
@@ -86,7 +88,7 @@ data,ibov,cdi
 
 ### Regras de integridade
 
-- `data` única por tabela (chave primária) e no formato mensal `AAAA-MM`.
+- `data` única por tabela (chave primária), no formato `AAAA-MM` (mensal) ou `AAAA-MM-DD` (diário) — uma frequência por banco.
 - Sem valores ausentes (NaN) nas colunas de retorno.
 - Valores sempre em **decimal**, nunca em porcentagem.
 - `retornos` cobre apenas as datas presentes em **ambas** as tabelas brutas
@@ -180,11 +182,13 @@ Ingestão (app.ingestao): baixa Ibovespa+CDI e popula o [SQLite] do topo da este
 Leitura das fontes externas e persistência no SQLite. É o único módulo que conhece o banco e o disco.
 
 ```python
-def baixar_precos(ativos: list[str], inicio: str, fim: str) -> "DataFrame":
+def baixar_precos(ativos: list[str], inicio: str, fim: str,
+                  frequencia: str = "1mo") -> "DataFrame":
     """Baixa preços de fechamento (ex.: ^BVSP) do Yahoo Finance, via urllib. (F1)"""
 
-def baixar_cdi_bcb(inicio: str, fim: str) -> "DataFrame":
-    """Baixa o CDI mensal da API do Banco Central (SGS, série 4391). (F1)"""
+def baixar_cdi_bcb(inicio: str, fim: str, frequencia: str = "1mo") -> "DataFrame":
+    """Baixa o CDI da API do Banco Central — SGS 4391 (% a.m.) se mensal,
+    SGS 12 (% a.d.) se diário. (F1)"""
 
 def gravar_sqlite(df: "DataFrame", db_path: str, tabela: str) -> None:
     """Grava um DataFrame em uma tabela do banco SQLite. (F1, NF6)"""
@@ -193,17 +197,28 @@ def ler_sqlite(db_path: str, tabela: str) -> "DataFrame":
     """Lê uma tabela do banco SQLite para um DataFrame. (F1, NF6)"""
 
 def calcular_retornos(precos: "DataFrame") -> "DataFrame":
-    """Converte preços em retornos mensais alinhados por data."""
+    """Converte preços em retornos por período, alinhados por data."""
 ```
+
+> **Frequência (mensal ou diária).** `frequencia="1mo"` (default) produz `data` no formato `AAAA-MM`; `"1d"` produz `AAAA-MM-DD`. Muda também a fonte do CDI: série **4391** (acumulada no mês, % a.m.) contra série **12** (% a.d.). A SGS recusa séries diárias de mais de 10 anos por requisição (HTTP 406), então a DAL fatia o período em janelas de 10 anos e concatena, removendo a data repetida na fronteira.
 
 ### `app.ingestao` — Ingestão da base real (F1, NF6)
 
 Passo operacional que **popula** o banco: baixa Ibovespa (Yahoo) + CDI (Banco Central), calcula os retornos alinhados e grava as tabelas `ibovespa`/`cdi`/`retornos`. Rodado uma vez (`python -m app.ingestao`); depois o pipeline lê do SQLite.
 
 ```python
-def montar_base(db_path: str = "data/mercado.db",
-                inicio: str = "2000-01-01", fim: str | None = None) -> dict:
+BANCO_PADRAO = {"1mo": "data/mercado.db", "1d": "data/mercado_diario.db"}
+
+def montar_base(db_path: str | None = None, inicio: str = "2000-01-01",
+                fim: str | None = None, frequencia: str = "1mo") -> dict:
     """Baixa Ibovespa+CDI, calcula retornos e grava as 3 tabelas. (F1, NF6)"""
+```
+
+Cada frequência tem seu banco, de modo que uma ingestão não sobrescreve a outra:
+
+```
+python -m app.ingestao                      # mensal  -> data/mercado.db
+python -m app.ingestao 2022-05-22 --diario  # diário  -> data/mercado_diario.db
 ```
 
 ### `app.mercado` — Mercados (F2, F3, F4)
@@ -276,7 +291,7 @@ def funcao_valor(A, W, gamma):
     """V_t(W) = A_t·W^(1−γ)/(1−γ). (F11)"""
 ```
 
-> **Restrição sobre os pesos α (domínio).** `resolver_alpha_otimo` é **sempre irrestrito**: `α ∈ ℝ^N`, admitindo **short** (α<0) e **alavancagem** (Σα>1), sem teto `α_max`. Não há como impor long-only ou limites — o domínio irrestrito é o do artigo (§3.1). Para N=1 o `brentq` parte do bracket `[−20, 20]` e o duplica até haver troca de sinal de G; se não houver (arbitragem na amostra, isto é, nenhum cenário com R < R_f), não existe α* finito e a função levanta `RuntimeError`.
+> **Restrição sobre os pesos α (domínio).** `resolver_alpha_otimo` é **sempre irrestrito**: `α ∈ ℝ^N`, admitindo **short** (α<0) e **alavancagem** (Σα>1), sem teto `α_max`. Não há como impor long-only ou limites. Para N=1 o `brentq` parte do bracket `[−20, 20]` e o duplica até haver troca de sinal de G; se não houver (arbitragem na amostra, isto é, nenhum cenário com R < R_f), não existe α* finito e a função levanta `RuntimeError`.
 
 ### `app.principal` — Orquestrador (F10, NF5)
 
@@ -287,6 +302,8 @@ def executar_pipeline(config: dict) -> dict:
     """DAL → mercado → agente → simulação; devolve o resultado (α*, θ_t,
     trajetórias, métricas) que a web consome. (NF5)"""
 ```
+
+> **`n_scenarios` depende da frequência dos dados.** O default de 80 000 serve para séries **mensais**. Numa série **diária**, o prêmio de risco por período é ~21× menor enquanto σ cai só ~4,6×: o erro de Monte Carlo `σ/√n` passa a dominar o prêmio e α\* reflete a semente, não os dados. Medido na base diária 2022–2026, com 80 000 cenários α\* varia de −0,125 a +0,148 conforme a semente; com 8 milhões converge para o valor de Merton (+0,038). O pipeline emite um `UserWarning` quando o prêmio estimado tem menos de 4 erros-padrão de Monte Carlo, sugerindo o `n_scenarios` mínimo.
 
 ### `web` (à parte) — Interface (F15, F16, NF2)
 
@@ -304,10 +321,10 @@ Vive em projeto separado. A separação MVC permite trocar a interface (web ou o
 
 <!--Descrever o algoritmo implementado em cada função-->
 
-> **Estado:** os algoritmos das Etapas 0–6 estão **implementados e testados** (tarefas 4–7, um notebook por requisito em `tests/`). A integração com o QuantEcon (tarefa 8) e o pseudocódigo detalhado ficam para depois.
+> **Estado:** os algoritmos das Etapas 0–6 estão **implementados e testados** (tarefas 4–7, um notebook por requisito em `tests/`). A integração com o QuantEcon (tarefa 8) está feita em `tests/19_algoritmo_quantecon.ipynb`, que reproduz a solução analítica por programação dinâmica (quadratura `qnwnorm` + `brentq`) e confirma a miopia. 
 
 1. **Calibração (Etapa 0)** — `media`/`covariancia`: estimadores amostrais de μ̂ e Σ̂ sobre os retornos; R_f vem do CDI.
-2. **Carteira ótima α\* (Etapa 1)** — `resolver_alpha_otimo`: maximiza J(α)=E[u(R_p)] resolvendo a FOC `G(α)=0` via **SLSQP** (N≥2) ou **brentq** (N=1), com `G`/J avaliados por **Monte Carlo** sobre cenários R ~ Normal(μ̂, Σ̂). **α sempre irrestrito** (short e alavancagem, sem teto;). Resolvida **uma única vez** (miopia).
+2. **Carteira ótima α\* (Etapa 1)** — `resolver_alpha_otimo`: maximiza J(α)=E[u(R_p)] resolvendo a FOC `G(α)=0` via **SLSQP** (N≥2) ou **brentq** (N=1), com `G`/J avaliados por **Monte Carlo** sobre cenários R ~ Normal(μ̂, Σ̂). **α sempre irrestrito** (short e alavancagem, sem teto; §3.1). Resolvida **uma única vez** (miopia).
 3. **Φ̂ (Etapa 2)** — `phi_chapeu`: esperança `E[R_p^(1−γ)]` do portfólio ótimo, calculada **uma vez** e reutilizada.
 4. **Coeficientes A_t e frações θ_t (Etapas 3–4)** — `recorrencia_A` / `fracoes_consumo`: **indução retroativa** de `t=T` até `t=0` (backward pass), puramente algébrica, sem otimização.
 5. **Simulação forward (Etapas 5–6)** — `propagar_riqueza`: a cada t consome `c_t*=θ_t·W_t`, investe a poupança em α* e propaga a riqueza (forward pass).
