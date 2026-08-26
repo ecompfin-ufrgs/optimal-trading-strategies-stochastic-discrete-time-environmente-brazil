@@ -37,10 +37,7 @@ def executar_pipeline(config: dict) -> dict:
     alavancagem permitidos, sem teto), fiel ao PDF (§3.1).
 
     **``n_scenarios`` e a frequência dos dados.** O default de 80 000 serve para
-    séries **mensais**. Em séries **diárias** o prêmio de risco por período é ~21×
-    menor, enquanto σ cai só ~4,6×: o erro de Monte Carlo passa a dominar e α*
-    vira função da semente. Nesse regime use ``n_scenarios`` na casa dos milhões
-    — o pipeline emite um ``UserWarning`` quando o valor é insuficiente.
+    séries **mensais**. Em séries **diárias**, use ``n_scenarios`` na casa dos milhões.
 
     Returns
     -------
