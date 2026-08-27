@@ -303,7 +303,7 @@ def executar_pipeline(config: dict) -> dict:
     trajetórias, métricas) que a web consome. (NF5)"""
 ```
 
-> **`n_scenarios` depende da frequência dos dados.** O default de 80 000 serve para séries **mensais**. Numa série **diária**, o prêmio de risco por período é ~21× menor enquanto σ cai só ~4,6×: o erro de Monte Carlo `σ/√n` passa a dominar o prêmio e α\* reflete a semente, não os dados. Medido na base diária 2022–2026, com 80 000 cenários α\* varia de −0,125 a +0,148 conforme a semente; com 8 milhões converge para o valor de Merton (+0,038). O pipeline emite um `UserWarning` quando o prêmio estimado tem menos de 4 erros-padrão de Monte Carlo, sugerindo o `n_scenarios` mínimo.
+> **`n_scenarios` depende da frequência dos dados.** O default de 80 000 serve para séries **mensais**. Numa série **diária**, o prêmio de risco por período é ~21× menor enquanto σ cai só ~4,6×: o erro de Monte Carlo `σ/√n` passa a dominar o prêmio e α\* reflete a semente, não os dados. Medido na base diária 2022–2026, com 80 000 cenários α\* varia de −0,125 a +0,148 conforme a semente; com 8 milhões converge para o valor de Merton (+0,038).
 
 ### `web` (à parte) — Interface (F15, F16, NF2)
 
