@@ -32,7 +32,7 @@ def executar_pipeline(config: dict) -> dict:
       Simulação: ``n_scenarios`` (80000), ``n_paths`` (5000), ``seed`` (42).
 
     Os retornos são sempre Normais e a carteira α* é sempre irrestrita (short e
-    alavancagem permitidos, sem teto), fiel ao PDF (§3.1).
+    alavancagem permitidos, sem teto).
 
     **``n_scenarios`` e a frequência dos dados.** O default de 80 000 serve para
     séries **mensais**. Em séries **diárias**, use ``n_scenarios`` na casa dos milhões.
