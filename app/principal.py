@@ -9,8 +9,6 @@ Liga os filtros na ordem da esteira (F10, NF5):
 Toda a lógica vive nos módulos; aqui só há orquestração.
 """
 
-import warnings
-
 import numpy as np
 
 from app import dal, nucleo
@@ -75,9 +73,7 @@ def executar_pipeline(config: dict) -> dict:
     inv = Investidor(cfg.get("gamma", 5.0), cfg.get("beta", 0.96),
                      cfg.get("w0", 1.0), cfg.get("horizonte", 120))
     seed = cfg.get("seed", 42)
-    n_scenarios = cfg.get("n_scenarios", 80_000)
-    _conferir_ruido_mc(mercado, rf, n_scenarios)
-    alpha = inv.carteira_otima(mercado, rf, n_scenarios=n_scenarios, seed=seed)
+    alpha = inv.carteira_otima(mercado, rf, n_scenarios=cfg.get("n_scenarios", 80_000), seed=seed)
     theta = inv.fracoes_consumo()
 
     # ── 4. Simulação forward (Etapas 5–6) ───────────────────────────────────
