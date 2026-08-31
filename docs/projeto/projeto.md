@@ -123,7 +123,8 @@ Adota-se a separação de paradigmas (NF5):
 | `app.agente` | indivíduo: classe `Investidor` (γ, β, W₀, T, CRRA) | F5, F6, F8, F9 |
 | `app.nucleo` | funções puras com a matemática do modelo | F6–F11 |
 | `app.principal` | **orquestrador** da esteira pipes-and-filters | F10, NF5 |
-| `app.__main__` | ponto de entrada `python -m app` (usa o banco real se existir) | NF5 |
+| `app.graficos` | figuras dos resultados em `results/` (fora da esteira) | F16 |
+| `app.__main__` | ponto de entrada `python -m app` — roda a **base diária** (usa o banco real se existir) | NF5 |
 | `web` (à parte) | interface web sobre o módulo principal | F15, F16, NF2 |
 
 ### Figura — esteira do pipeline
@@ -263,6 +264,10 @@ class Investidor:
         """Frações de consumo θ_t = A_t^(−1/γ), t=0..T. (F8, F9)"""
 ```
 
+> **O fator de desconto β e a frequência dos dados.** β é **adimensional** e, sob a hipótese i.i.d., **não aparece na CPO de α\*** (equação 30) — é justamente por isso que a carteira ótima é atemporal e a miopia vale. β governa **apenas** a recorrência `A_t` e, portanto, as frações de consumo θ_t.
+>
+> Como β entra elevado a `t`, e `t` conta **períodos**, o mesmo número descreve agentes diferentes conforme a frequência: β = 0,96 ao mês equivale a 0,613 ao ano, enquanto β = 0,96 ao pregão equivale a 3,4×10⁻⁵ ao ano — um agente que consome 92% da riqueza no primeiro ano. Para evitar essa ambiguidade, `app.__main__` fixa o desconto em termos **anuais** (`BETA_ANUAL = 0.96`) e converte: `β_pregão = β_anual^(1/252) = 0,999838`. Ao reportar resultados, declare sempre as duas formas.
+
 ### `app.nucleo` — Funções puras / matemática do modelo (F6–F11)
 
 Sem estado. Cada função implementa uma equação do artigo e é testável isolada.
@@ -303,7 +308,25 @@ def executar_pipeline(config: dict) -> dict:
     trajetórias, métricas) que a web consome. (NF5)"""
 ```
 
-> **`n_scenarios` depende da frequência dos dados.** O default de 80 000 serve para séries **mensais**. Numa série **diária**, o prêmio de risco por período é ~21× menor enquanto σ cai só ~4,6×: o erro de Monte Carlo `σ/√n` passa a dominar o prêmio e α\* reflete a semente, não os dados. Medido na base diária 2022–2026, com 80 000 cenários α\* varia de −0,125 a +0,148 conforme a semente; com 8 milhões converge para o valor de Merton (+0,038).
+> **`n_scenarios` depende da frequência dos dados.** O default de 80 000 serve para séries **mensais**. Medido na base diária 2022–2026, com 80 000 cenários α\* varia de −0,125 a +0,148 conforme a semente; com 8 milhões converge para o valor de Merton (+0,038). Não há verificação automática: cabe a quem chama dimensionar `n_scenarios` conforme a frequência da base — o `app.__main__` usa 4 milhões no diário e 200 mil no mensal.
+
+### `app.graficos` — Figuras dos resultados (F16)
+
+Gera em `results/` as seis figuras usadas no documento: `G(α)` com a raiz marcada, `α*` × γ (hipérbole de Merton), `α*` × T (a miopia como linha horizontal), `θ_t`, trajetória de `W_t` com banda P5–P95, e consumo agregado por ano.
+
+```python
+def gerar(res, mercado, rf, cfg, rodape, periodos_por_ano,
+          destino="results") -> list[str]:
+    """Escreve as figuras e devolve os caminhos."""
+```
+
+Acionado por `python -m app --graficos`, na mesma execução que calcula — os parâmetros das figuras são os da linha de comando, sem repetição nem chance de divergência.
+
+> **Isolamento do matplotlib.** `app.principal` **não** importa este módulo, e o import é tardio dentro do `__main__`. Sem a flag, o matplotlib nem é carregado. Isso importa para a camada web: ela consome só o `executar_pipeline` e desenha no navegador (a partir do JSON), sem pagar o custo de inicialização nem o risco de um backend não thread-safe. O `tests/20_graficos.ipynb` tem uma asserção que trava essa fronteira.
+
+> **Procedência impressa na figura.** Cada PNG leva no rodapé a base, a janela dos dados, γ, β anual, T, `n_scenarios`, semente e o α* da rodada. Optou-se por isso em vez de um arquivo de metadados paralelo: a legenda é impossível de separar do resultado e acompanha a figura para dentro do documento. As figuras são **versionadas** — o texto as referencia e a banca deve vê-las sem rodar nada.
+
+> **Custo.** Dois gráficos reotimizam: `G(α)` avalia a FOC em 60 pontos (~6 s) e `α*` × γ refaz a otimização em 8 valores (~12 s). Por isso ficam atrás da flag, e **não devem ir para um endpoint web**. Já `α*` × T sai de graça: α* não depende de T, e é justamente o achatamento que o gráfico demonstra.
 
 ### `web` (à parte) — Interface (F15, F16, NF2)
 
@@ -324,8 +347,10 @@ Vive em projeto separado. A separação MVC permite trocar a interface (web ou o
 > **Estado:** os algoritmos das Etapas 0–6 estão **implementados e testados** (tarefas 4–7, um notebook por requisito em `tests/`). A integração com o QuantEcon (tarefa 8) está feita em `tests/19_algoritmo_quantecon.ipynb`, que reproduz a solução analítica por programação dinâmica (quadratura `qnwnorm` + `brentq`) e confirma a miopia. 
 
 1. **Calibração (Etapa 0)** — `media`/`covariancia`: estimadores amostrais de μ̂ e Σ̂ sobre os retornos; R_f vem do CDI.
-2. **Carteira ótima α\* (Etapa 1)** — `resolver_alpha_otimo`: maximiza J(α)=E[u(R_p)] resolvendo a FOC `G(α)=0` via **SLSQP** (N≥2) ou **brentq** (N=1), com `G`/J avaliados por **Monte Carlo** sobre cenários R ~ Normal(μ̂, Σ̂). **α sempre irrestrito** (short e alavancagem, sem teto; §3.1). Resolvida **uma única vez** (miopia).
+2. **Carteira ótima α\* (Etapa 1)** — `resolver_alpha_otimo`: maximiza J(α)=E[u(R_p)] resolvendo a FOC `G(α)=0` via **SLSQP** (N≥2) ou **brentq** (N=1), com `G`/J avaliados por **Monte Carlo** sobre cenários R ~ Normal(μ̂, Σ̂). **α sempre irrestrito** (short e alavancagem, sem teto). Resolvida **uma única vez** (miopia).
 3. **Φ̂ (Etapa 2)** — `phi_chapeu`: esperança `E[R_p^(1−γ)]` do portfólio ótimo, calculada **uma vez** e reutilizada.
+
+> As Etapas 3 e 7 também saem no resultado: `A_t` (coeficientes da recorrência) e `valor_V` (função valor V_t avaliada em W₀, requisito **F11**). Antes ficavam internas ao agente e eram descartadas. A simulação devolve, além da média, os percentis **período a período** (`trajetoria_W_p5`/`_mediana`/`_p95`) — sem eles não há banda de confiança, nem no `results/` nem na web.
 4. **Coeficientes A_t e frações θ_t (Etapas 3–4)** — `recorrencia_A` / `fracoes_consumo`: **indução retroativa** de `t=T` até `t=0` (backward pass), puramente algébrica, sem otimização.
 5. **Simulação forward (Etapas 5–6)** — `propagar_riqueza`: a cada t consome `c_t*=θ_t·W_t`, investe a poupança em α* e propaga a riqueza (forward pass).
 6. **Validação (Etapas 7–8)** — `funcao_valor` (consistência de Bellman) e o teste de miopia `‖α*_T − α*_{T'}‖ < ε` (F12–F14).
