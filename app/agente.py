@@ -34,6 +34,7 @@ class Investidor:
         self.horizonte = int(horizonte)
         self._alpha_star: np.ndarray | None = None
         self._phi_hat: float | None = None
+        self._A: np.ndarray | None = None
 
     # ── Utilidade CRRA (F5) ─────────────────────────────────────────────────
     def utilidade(self, c):
@@ -54,8 +55,7 @@ class Investidor:
         """Carteira ótima α* via FOC G(α*)=0. (F6)
 
         Amostra cenários (líquidos) do mercado e converte para fatores brutos.
-        **α é sempre irrestrito** (short e alavancagem permitidos, sem teto),
-        fiel ao PDF (§3.1).
+        **α é sempre irrestrito** (short e alavancagem permitidos, sem teto).
 
         ``opts`` é repassado a ``nucleo.resolver_alpha_otimo`` (``tol``,
         ``maxiter``, ``alpha0``).
@@ -78,8 +78,8 @@ class Investidor:
                 "chame carteira_otima(...) antes de fracoes_consumo() — "
                 "θ_t depende de Φ̂, que vem da política ótima."
             )
-        A = nucleo.recorrencia_A(self._phi_hat, self.beta, self.gamma, self.horizonte)
-        return nucleo.fracoes_consumo(A, self.gamma)
+        self._A = nucleo.recorrencia_A(self._phi_hat, self.beta, self.gamma, self.horizonte)
+        return nucleo.fracoes_consumo(self._A, self.gamma)
 
     @property
     def alpha_star(self) -> np.ndarray | None:
@@ -90,3 +90,12 @@ class Investidor:
     def phi_hat(self) -> float | None:
         """Φ̂ da última política ótima (ou None)."""
         return self._phi_hat
+
+    @property
+    def coeficientes_A(self) -> np.ndarray | None:
+        """Coeficientes A_t da última recorrência (Etapa 3), ou None.
+
+        Guardados porque a função valor V_t = A_t·W^(1−γ)/(1−γ) (F11) depende
+        deles e, sem isso, seriam recalculados fora da esteira.
+        """
+        return self._A
