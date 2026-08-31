@@ -28,20 +28,20 @@ def executar_pipeline(config: dict) -> dict:
         ``rf_col`` : coluna da taxa livre de risco nos dados (default ``'cdi'``);
         ``cdi_anual`` : CDI anual p/ ``RendaFixa`` (se ausente, usa a média de ``rf_col``);
         ``periodos_por_ano`` : granularidade p/ converter ``cdi_anual`` (12 mensal, 252 diário).
-      Agente: ``gamma`` (5.0), ``beta`` (0.96), ``w0`` (1.0), ``horizonte`` (120).
+      Agente: ``gamma`` (5.0), ``beta`` (0.96), ``w0`` (1.0);
+        ``horizonte`` : T em **períodos** — obrigatório, sem default (ver nota).
       Simulação: ``n_scenarios`` (80000), ``n_paths`` (5000), ``seed`` (42).
 
     Os retornos são sempre Normais e a carteira α* é sempre irrestrita (short e
-    alavancagem permitidos, sem teto).
-
-    **``n_scenarios`` e a frequência dos dados.** O default de 80 000 serve para
-    séries **mensais**. Em séries **diárias**, use ``n_scenarios`` na casa dos milhões.
+    alavancagem permitidos, sem teto), fiel ao PDF (§3.1).
 
     Returns
     -------
     dict com ``alpha_star`` (carteira ótima), ``theta``/``consumo_inicial``,
-    ``phi_hat``, calibração (``mu_hat``, ``sigma_hat``, ``rf``) e o resumo da
-    simulação (``E_W_T``, percentis, trajetórias médias).
+    ``phi_hat``, ``A_t`` (Etapa 3) e ``valor_V`` (Etapa 7 — V_t na riqueza
+    inicial, F11), calibração (``mu_hat``, ``sigma_hat``, ``rf``) e o resumo da
+    simulação: ``E_W_T``, percentis de W_T e as trajetórias
+    ``trajetoria_W_media``/``_mediana``/``_p5``/``_p95`` e ``trajetoria_c_media``.
     """
     cfg = dict(config)
     coluna_data = cfg.get("coluna_data", "data")
@@ -70,10 +70,17 @@ def executar_pipeline(config: dict) -> dict:
     mercado = RendaVariavel(retornos[[coluna_data] + ativos], coluna_data=coluna_data)
 
     # ── 3. Agente — política ótima (Etapas 1–4) ─────────────────────────────
+    if "horizonte" not in cfg:
+        raise ValueError(
+            "config precisa de 'horizonte' (T, em períodos). Não há default: "
+            "o número de períodos depende da frequência dos dados — 60 é 5 anos "
+            "no mensal e ~3 meses no diário."
+        )
     inv = Investidor(cfg.get("gamma", 5.0), cfg.get("beta", 0.96),
-                     cfg.get("w0", 1.0), cfg.get("horizonte", 120))
+                     cfg.get("w0", 1.0), cfg["horizonte"])
     seed = cfg.get("seed", 42)
-    alpha = inv.carteira_otima(mercado, rf, n_scenarios=cfg.get("n_scenarios", 80_000), seed=seed)
+    alpha = inv.carteira_otima(mercado, rf, n_scenarios=cfg.get("n_scenarios", 80_000),
+                               seed=seed)
     theta = inv.fracoes_consumo()
 
     # ── 4. Simulação forward (Etapas 5–6) ───────────────────────────────────
@@ -85,6 +92,9 @@ def executar_pipeline(config: dict) -> dict:
 
     # ── 5. Resultado ────────────────────────────────────────────────────────
     W_T = sim["W"][:, -1]
+    A_t = inv.coeficientes_A
+    valor_V = nucleo.funcao_valor(A_t, inv.w0, inv.gamma)
+    W_p5, W_p50, W_p95 = np.percentile(sim["W"], [5, 50, 95], axis=0)
     return {
         "ativos": ativos,
         "rf": rf,
@@ -98,6 +108,11 @@ def executar_pipeline(config: dict) -> dict:
         "E_W_T": float(W_T.mean()),
         "W_T_p5": float(np.percentile(W_T, 5)),
         "W_T_p95": float(np.percentile(W_T, 95)),
+        "A_t": A_t,                                       # Etapa 3
+        "valor_V": valor_V,                               # Etapa 7 — V_t(W_0), F11
         "trajetoria_W_media": sim["W"].mean(axis=0),
+        "trajetoria_W_mediana": W_p50,
+        "trajetoria_W_p5": W_p5,
+        "trajetoria_W_p95": W_p95,
         "trajetoria_c_media": sim["c"].mean(axis=0),
     }
