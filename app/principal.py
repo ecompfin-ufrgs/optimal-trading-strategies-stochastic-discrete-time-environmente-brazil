@@ -15,25 +15,42 @@ from app import dal, nucleo
 from app.agente import Investidor
 from app.mercado import RendaFixa, RendaVariavel
 
+# Fator de desconto **anual** padrão.
+
+BETA_ANUAL_PADRAO = 0.96
+
+
+def _n_scenarios_padrao(periodos_por_ano: int) -> int:
+    """Cenários de Monte Carlo adequados à frequência dos dados.
+    """
+    
+    return 200_000 if periodos_por_ano <= 12 else 4_000_000
+
 
 def executar_pipeline(config: dict) -> dict:
     """Executa a esteira de ponta a ponta e devolve os resultados. (NF5)
 
     Chaves de ``config``:
+      Frequência — **obrigatória**, sem default (ver nota):
+        ``periodos_por_ano`` : 12 (mensal) ou 252 (diário).
       Dados (uma das duas):
         ``retornos`` : DataFrame com ``data`` + colunas de ativos; OU
         ``db_path`` (+ ``tabela``, default ``'retornos'``) : lê do SQLite.
       Mercado:
         ``ativos`` : colunas de risco (default: todas menos ``data`` e ``rf_col``);
         ``rf_col`` : coluna da taxa livre de risco nos dados (default ``'cdi'``);
-        ``cdi_anual`` : CDI anual p/ ``RendaFixa`` (se ausente, usa a média de ``rf_col``);
-        ``periodos_por_ano`` : granularidade p/ converter ``cdi_anual`` (12 mensal, 252 diário).
-      Agente: ``gamma`` (5.0), ``beta`` (0.96), ``w0`` (1.0);
-        ``horizonte`` : T em **períodos** — obrigatório, sem default (ver nota).
-      Simulação: ``n_scenarios`` (80000), ``n_paths`` (5000), ``seed`` (42).
+        ``cdi_anual`` : CDI **anual**, convertido para o período por ``RendaFixa``
+        com ``periodos_por_ano``. Se ausente, usa a média de ``rf_col``, que o
+        ``dal`` já grava por período.
+      Agente: ``gamma`` (5.0), ``w0`` (1.0);
+        ``horizonte`` : T em **períodos** — obrigatório, sem default (ver nota);
+        desconto: ``beta_anual`` (0.96, convertido para o período) **ou**
+        ``beta`` (já por período) — passar os dois é erro.
+      Simulação: ``n_scenarios`` (200k mensal / 4M diário), ``n_paths`` (5000),
+        ``seed`` (42).
 
     Os retornos são sempre Normais e a carteira α* é sempre irrestrita (short e
-    alavancagem permitidos, sem teto), fiel ao PDF (§3.1).
+    alavancagem permitidos, sem teto).
 
     Returns
     -------
@@ -42,10 +59,24 @@ def executar_pipeline(config: dict) -> dict:
     inicial, F11), calibração (``mu_hat``, ``sigma_hat``, ``rf``) e o resumo da
     simulação: ``E_W_T``, percentis de W_T e as trajetórias
     ``trajetoria_W_media``/``_mediana``/``_p5``/``_p95`` e ``trajetoria_c_media``.
+    Devolve também a unidade de tempo efetivamente usada — ``periodos_por_ano``
+    e ``beta`` (já por período) — para que quem exibe os números não precise
+    refazer a conversão.
     """
     cfg = dict(config)
     coluna_data = cfg.get("coluna_data", "data")
     rf_col = cfg.get("rf_col", "cdi")
+
+    # ── 0. Frequência — a unidade de tempo de todo o resto ──────────────────
+    if "periodos_por_ano" not in cfg:
+        raise ValueError(
+            "config precisa de 'periodos_por_ano' (12 mensal, 252 diário). "
+            "Não há default: é ele que dá unidade de tempo a 'cdi_anual', "
+            "'beta_anual' e ao default de 'n_scenarios'."
+        )
+    ppa = int(cfg["periodos_por_ano"])
+    if ppa <= 0:
+        raise ValueError(f"'periodos_por_ano' deve ser positivo; veio {ppa!r}.")
 
     # ── 1. DAL — obter retornos ─────────────────────────────────────────────
     if cfg.get("retornos") is not None:
@@ -62,7 +93,7 @@ def executar_pipeline(config: dict) -> dict:
 
     # ── 2. Mercado — calibração (Etapa 0) ───────────────────────────────────
     if "cdi_anual" in cfg:
-        rf = RendaFixa(cfg["cdi_anual"], cfg.get("periodos_por_ano", 12)).retorno_livre_risco()
+        rf = RendaFixa(cfg["cdi_anual"], ppa).retorno_livre_risco()
     elif rf_col in retornos.columns:
         rf = float(retornos[rf_col].mean())
     else:
@@ -76,11 +107,15 @@ def executar_pipeline(config: dict) -> dict:
             "o número de períodos depende da frequência dos dados — 60 é 5 anos "
             "no mensal e ~3 meses no diário."
         )
-    inv = Investidor(cfg.get("gamma", 5.0), cfg.get("beta", 0.96),
+    if "beta" in cfg and "beta_anual" in cfg:
+        raise ValueError("use 'beta' (por período) OU 'beta_anual', não os dois.")
+    beta = (float(cfg["beta"]) if "beta" in cfg
+            else float(cfg.get("beta_anual", BETA_ANUAL_PADRAO)) ** (1.0 / ppa))
+    inv = Investidor(cfg.get("gamma", 5.0), beta,
                      cfg.get("w0", 1.0), cfg["horizonte"])
     seed = cfg.get("seed", 42)
-    alpha = inv.carteira_otima(mercado, rf, n_scenarios=cfg.get("n_scenarios", 80_000),
-                               seed=seed)
+    n_scenarios = cfg.get("n_scenarios") or _n_scenarios_padrao(ppa)
+    alpha = inv.carteira_otima(mercado, rf, n_scenarios=n_scenarios, seed=seed)
     theta = inv.fracoes_consumo()
 
     # ── 4. Simulação forward (Etapas 5–6) ───────────────────────────────────
@@ -97,7 +132,9 @@ def executar_pipeline(config: dict) -> dict:
     W_p5, W_p50, W_p95 = np.percentile(sim["W"], [5, 50, 95], axis=0)
     return {
         "ativos": ativos,
+        "periodos_por_ano": ppa,
         "rf": rf,
+        "beta": beta,
         "mu_hat": mercado.media(),
         "sigma_hat": mercado.covariancia(),
         "alpha_star": alpha,                              # carteira ótima
@@ -108,8 +145,8 @@ def executar_pipeline(config: dict) -> dict:
         "E_W_T": float(W_T.mean()),
         "W_T_p5": float(np.percentile(W_T, 5)),
         "W_T_p95": float(np.percentile(W_T, 95)),
-        "A_t": A_t,                                       # Etapa 3
-        "valor_V": valor_V,                               # Etapa 7 — V_t(W_0), F11
+        "A_t": A_t,
+        "valor_V": valor_V,
         "trajetoria_W_media": sim["W"].mean(axis=0),
         "trajetoria_W_mediana": W_p50,
         "trajetoria_W_p5": W_p5,
