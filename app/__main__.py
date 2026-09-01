@@ -29,7 +29,7 @@ import pandas as pd
 
 from app.principal import executar_pipeline
 
-# Períodos por ano, banco e n_scenarios default de cada frequência. 
+# Períodos por ano, banco e n_scenarios default de cada frequência.
 
 PERFIS = {
     "1d":  {"periodos_por_ano": 252, "db": os.path.join("data", "mercado_diario.db"),
@@ -40,7 +40,7 @@ PERFIS = {
             "mu": 0.015, "sigma": 0.06, "cdi": 0.008, "freq_pandas": "MS"},
 }
 
-BETA_ANUAL = 0.96         
+BETA_ANUAL = 0.96
 GAMMA = 5.0
 ANOS = 5
 W0 = 1.0
@@ -89,16 +89,16 @@ def _analisar(argv) -> argparse.Namespace:
 
 
 def main(argv=()) -> None:
-    """Executa a esteira. ``argv`` vazio usa os defaults (usado pelos testes)."""
+    """Executa a esteira. ``argv``."""
     args = _analisar(list(argv))
     perfil = PERFIS["1mo" if args.mensal else "1d"]
     ppa = perfil["periodos_por_ano"]
     unid = perfil["unidade"]
     T = int(round(ppa * args.anos))
-    beta = args.beta_anual ** (1.0 / ppa)
     n_scenarios = args.n_scenarios or perfil["n_scenarios"]
 
-    comum = {"ativos": ["ibov"], "gamma": args.gamma, "beta": beta, "w0": args.w0,
+    comum = {"ativos": ["ibov"], "periodos_por_ano": ppa, "gamma": args.gamma,
+             "beta_anual": args.beta_anual, "w0": args.w0,
              "horizonte": T, "n_scenarios": n_scenarios,
              "n_paths": args.n_paths, "seed": args.seed}
     if os.path.exists(perfil["db"]):
@@ -121,7 +121,7 @@ def main(argv=()) -> None:
     print(f"gamma                : {args.gamma}")
     print(f"Carteira otima a*   : {np.round(res['alpha_star'], 4)}")
     print(f"Phi_hat              : {res['phi_hat']:.6f}")
-    print(f"beta                 : {beta:.6f} por {unid}  ({args.beta_anual:.4g} a.a.)")
+    print(f"beta                 : {res['beta']:.6f} por {unid}  ({args.beta_anual:.4g} a.a.)")
     print(f"theta_0 ({unid})     : {res['theta'][0]:.6f}")
     print(f"theta_T (terminal)   : {res['theta'][-1]:.4f}")
 
@@ -134,7 +134,6 @@ def main(argv=()) -> None:
           f"[P5={res['W_T_p5']:.6f}, P95={res['W_T_p95']:.6f}]")
 
     if args.graficos:
-
         from app import graficos
         from app.mercado import RendaVariavel
         ret = config.get("retornos")
