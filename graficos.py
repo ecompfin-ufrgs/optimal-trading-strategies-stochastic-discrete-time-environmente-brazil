@@ -2,30 +2,26 @@
 
 Gera em ``results/`` as ilustrações usadas no documento. **Não faz parte da
 esteira**: `app.principal` não importa este módulo, e por isso o matplotlib
-nunca é carregado pela camada web (que desenha no navegador, a partir do JSON).
+nunca é carregado pela camada web.
 
 Cada figura leva no rodapé a **procedência** — base, janela dos dados,
-parâmetros e o α* da rodada. Assim uma figura solta continua auditável: não há
-arquivo de metadados paralelo que possa ficar para trás.
+parâmetros e o α* da rodada. Assim uma figura solta continua auditável.
 
 Uso: ``python -m app --graficos`` (os parâmetros são os da própria execução).
 """
 
-from __future__ import annotations
-
 import os
 
 import matplotlib
-matplotlib.use("Agg")                      # sem display: só escreve arquivo
-import matplotlib.pyplot as plt            # noqa: E402
-import numpy as np                         # noqa: E402
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
 
-from app import nucleo                     # noqa: E402
+from app import nucleo
 
 DESTINO_PADRAO = "results"
 
-# Grade de γ do gráfico de sensibilidade. Exige uma reotimização por ponto, que
-# é o trecho caro da geração (~12 s com 4 milhões de cenários).
+# Grade de γ do gráfico de sensibilidade. Exige uma reotimização por ponto.
 GRADE_GAMMA = (1.5, 2.0, 3.0, 5.0, 8.0, 10.0, 15.0, 20.0)
 
 
@@ -65,8 +61,6 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
     T = res["horizonte"]
     escritos = []
 
-    # Cenários reaproveitados pelos dois gráficos que reotimizam — amostrar uma
-    # vez só mantém as curvas coerentes com o α* reportado.
     R = np.maximum(1.0 + mercado.amostrar(cfg["n_scenarios"], seed=cfg["seed"]), 0.0)
 
     # ── 1. G(α) × α, marcando a raiz ────────────────────────────────────────
@@ -93,8 +87,6 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
     escritos.append(_salvar(fig, destino, "alpha_vs_gamma.png", rodape))
 
     # ── 3. α* × T — a miopia (F12) ──────────────────────────────────────────
-    # α* não depende de T (a CPO da carteira é atemporal), então não há
-    # reotimização: a linha horizontal É o resultado.
     Ts = np.array([1, T // 4, T // 2, 3 * T // 4, T])
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(Ts, np.full(Ts.shape, a_star), "o-", color="#2ca02c")
