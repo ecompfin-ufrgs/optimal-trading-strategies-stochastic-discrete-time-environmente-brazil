@@ -116,8 +116,7 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
     ax.set_ylabel(r"$W_t$ (escala log)")
     ax.set_title("Trajetória da riqueza")
     ax.legend()
-    # A banda acima é real mas estreita demais para ser vista numa escala que
-    # cobre três ordens de grandeza; aqui ela aparece em termos relativos.
+
     largura = 100.0 * (p95 - p5) / np.where(media > 0, media, np.nan)
     ax2.plot(t, largura, color="#7f7f7f")
     ax2.set_xlabel("t (períodos)")
