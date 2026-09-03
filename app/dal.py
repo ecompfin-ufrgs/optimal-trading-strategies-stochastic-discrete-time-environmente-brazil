@@ -1,14 +1,13 @@
-"""app.dal — Data Access Layer (camada de acesso a dados).
+"""app.dal: a camada de acesso a dados (F1, NF6).
 
-Responsável por (F1, NF6):
-  * baixar séries históricas (Yahoo Finance);
-  * gravar e ler tabelas no banco SQLite;
-  * calcular retornos a partir de preços/níveis.
+E aqui que acontece:
+  - o download das series historicas (Yahoo Finance e Banco Central);
+  - a gravacao e a leitura das tabelas no SQLite;
+  - o calculo dos retornos a partir dos precos.
 
-É o **único** módulo que conhece o banco e o disco. As demais etapas da esteira
-(pipes-and-filters) recebem/devolvem ``DataFrame`` e nunca tocam o SQLite
-diretamente. Implementa o contrato definido na seção "Projeto de dados" de
-``docs/project/projeto.md``.
+Este e o unico modulo que sabe que existe banco e disco. As outras etapas so
+recebem e devolvem DataFrame, e nunca abrem o SQLite direto. O que esta aqui
+segue a secao "Projeto de dados" do docs/project/projeto.md.
 """
 
 import sqlite3
@@ -17,25 +16,25 @@ from typing import Sequence
 
 import pandas as pd
 
-# Frequências suportadas na ingestão. A granularidade da coluna ``data`` segue a
-# frequência: mensal usa ``AAAA-MM``; diária, ``AAAA-MM-DD``.
+# frequencias que a ingestao aceita. O formato da coluna data acompanha:
+# AAAA-MM no mensal e AAAA-MM-DD no diario.
 FORMATO_DATA = {"1mo": "%Y-%m", "1d": "%Y-%m-%d"}
 
-# Série do CDI na API SGS do Banco Central, por frequência.
-#   4391 = CDI acumulada no mês (% a.m.) · 12 = CDI (% a.d.)
+# qual serie do CDI pedir pra API do Banco Central em cada frequencia.
+# A 4391 e o CDI acumulado no mes; a 12 e o CDI do dia.
 _SERIE_CDI = {"1mo": 4391, "1d": 12}
 
-# A SGS recusa (HTTP 406) séries **diárias** de mais de 10 anos por requisição;
-# a mensal não tem esse limite. Janelas maiores são baixadas em partes.
+# a API recusa pedido de serie diaria com mais de 10 anos (responde 406).
+# No mensal nao tem esse limite. Periodo maior que isso e baixado em pedacos.
 _LIMITE_ANOS_SGS = {"1mo": None, "1d": 10}
 
-# A SGS é lenta e irregular em janelas diárias largas (medido: 0,4s a 19s para
-# ~2500 registros), então o timeout é bem mais folgado que o do Yahoo.
+# essa API demora bastante em janela diaria grande (ja levou 19 segundos pra
+# uns 2500 registros), entao o tempo de espera aqui e bem maior que o do Yahoo.
 _TIMEOUT_SGS = 90
 
 
 def _formato_data(frequencia: str) -> str:
-    """Formato da coluna ``data`` para a frequência pedida (valida o argumento)."""
+    """Formato da coluna data para a frequência pedida (valida o argumento)."""
     try:
         return FORMATO_DATA[frequencia]
     except KeyError:
@@ -50,25 +49,20 @@ def baixar_precos(
     fim: str | None = None,
     frequencia: str = "1mo",
 ) -> pd.DataFrame:
-    """Baixa preços de fechamento (ajustado) do Yahoo Finance. (F1)
+    """
+    Baixa os precos de fechamento ajustado no Yahoo Finance. (F1)
 
-    Parameters
-    ----------
-    ativos : sequência de tickers, ex.: ``["^BVSP"]``.
-    inicio : data inicial ``AAAA-MM-DD``.
-    fim : data final ``AAAA-MM-DD`` (``None`` => hoje).
-    frequencia : ``"1mo"`` (mensal) ou ``"1d"`` (diário).
+    Recebe a lista de tickers (por exemplo ["^BVSP"]), a data inicial e a
+    final no formato AAAA-MM-DD (se a final vier None, usa hoje) e a
+    frequencia, "1mo" pra mensal ou "1d" pra diario.
 
-    Returns
-    -------
-    DataFrame com a coluna ``data`` na primeira posição — ``AAAA-MM`` se mensal,
-    ``AAAA-MM-DD`` se diário — e uma coluna por ticker (fechamento ajustado).
+    Devolve um DataFrame com a coluna data na frente, no formato AAAA-MM ou
+    AAAA-MM-DD conforme a frequencia, e uma coluna por ticker.
 
-    Notes
-    -----
-    Usa a *chart API* pública do Yahoo via ``urllib`` (stdlib) — **sem**
-    ``yfinance``/``curl_cffi``, que sofriam de erro de certificado SSL no
-    Windows. Imports tardios mantêm os testes de banco/retorno offline (NF4).
+    Usa a API publica de graficos do Yahoo com o urllib, que ja vem no Python.
+    Cheguei aqui porque o yfinance e o curl_cffi davam erro de certificado SSL
+    no Windows. Os imports ficam dentro da funcao pra que os testes de banco e
+    de retorno continuem rodando sem internet.
     """
     import json
     from datetime import datetime, timezone
@@ -107,13 +101,11 @@ def calcular_retornos(precos: pd.DataFrame, coluna_data: str = "data") -> pd.Dat
     """Converte preços/níveis em retornos simples por período. (F1)
 
     A primeira observação é descartada (não há retorno anterior), portanto
-    ``T_efetivo = T − 1``. Todas as colunas que não sejam ``coluna_data`` são
+    T_efetivo = T − 1. Todas as colunas que não sejam coluna_data são
     tratadas como séries de preço.
 
-    Notes
-    -----
-    A taxa CDI, por **já ser** um retorno (não um preço), não passa por aqui:
-    ela entra direto na coluna ``cdi`` da tabela ``retornos``.
+    O CDI nao passa por aqui, porque ele ja e um retorno e nao um preco. Ele
+    vai direto pra coluna cdi da tabela retornos.
     """
     if coluna_data not in precos.columns:
         raise KeyError(f"coluna '{coluna_data}' ausente em precos.")
@@ -131,8 +123,7 @@ def gravar_sqlite(
     tabela: str,
     if_exists: str = "replace",
 ) -> None:
-    """
-    Grava um DataFrame numa tabela do banco SQLite. (F1, NF6)
+    """Grava um DataFrame numa tabela do SQLite. (F1, NF6)
     """
  
     _validar_identificador(tabela)
@@ -150,19 +141,17 @@ def ler_sqlite(db_path: str, tabela: str) -> pd.DataFrame:
 
 def baixar_cdi_bcb(inicio: str, fim: str | None = None,
                    frequencia: str = "1mo") -> pd.DataFrame:
-    """Baixa o CDI da API SGS do Banco Central. (F1)
+    """
+    Baixa o CDI da API do Banco Central. (F1)
 
-    Série 4391 = 'CDI acumulada no mês' (% a.m.) para ``frequencia="1mo"``;
-    série 12 = 'CDI' (% a.d.) para ``"1d"``. Devolve um DataFrame com ``data``
-    (``AAAA-MM`` ou ``AAAA-MM-DD``) e ``cdi`` (decimal **por período**, ex.:
-    0.0034 no mensal, 0.00047 no diário). Fonte oficial, gratuita e sem
-    cadastro; requer internet.
+    No mensal pede a serie 4391, que e o CDI acumulado no mes; no diario pede a
+    serie 12, que e o CDI do dia. Devolve um DataFrame com data e cdi, com o
+    cdi ja em decimal e por periodo (uns 0.0034 no mensal e 0.00047 no diario).
+    A fonte e oficial e de graca, nao precisa cadastro, mas precisa internet.
 
-    Notes
-    -----
-    Imports tardios (``json``/``urllib``, stdlib) e nenhuma dependência nova.
-    A série diária é baixada em janelas de 10 anos (limite da SGS) e
-    concatenada.
+    Os imports ficam dentro da funcao e sao todos da biblioteca padrao. A serie
+    diaria vem em pedacos de 10 anos, que e o limite da API, e depois eles sao
+    juntados.
     """
     import json
     from datetime import date as _date
@@ -191,7 +180,7 @@ def baixar_cdi_bcb(inicio: str, fim: str | None = None,
 
 
 def _janelas(inicio: pd.Timestamp, fim: pd.Timestamp, limite_anos: int | None):
-    """Fatia [inicio, fim] em janelas de no máximo ``limite_anos`` (None = 1 só)."""
+    """Corta o periodo em pedacos de no maximo limite_anos. Se for None, devolve um pedaco so."""
     if limite_anos is None or fim <= inicio + pd.DateOffset(years=limite_anos):
         return [(inicio, fim)]
     partes, atual = [], inicio
@@ -203,8 +192,7 @@ def _janelas(inicio: pd.Timestamp, fim: pd.Timestamp, limite_anos: int | None):
 
 
 def _validar_identificador(nome: str) -> None:
-    """Impede nomes de tabela inválidos/injeção (o nome vem do código, mas
-    validar mantém o contrato explícito)."""
+    """Confere se o nome da tabela e valido antes de montar o SQL."""
     if not nome.isidentifier():
         raise ValueError(f"nome de tabela inválido: {nome!r}")
 
