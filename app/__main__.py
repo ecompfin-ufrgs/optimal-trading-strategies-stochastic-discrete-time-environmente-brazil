@@ -13,11 +13,12 @@ camada web, e para experimentar parâmetros sem editar código:
 Se o banco não existir, uma série sintética na frequência pedida mantém a
 demonstração offline e reprodutível.
 
-**Convenção de β.** O desconto é escolhido em termos **anuais** e convertido para
-o período dos dados: ``β_período = β_anual^(1/períodos_por_ano)``. β é
-adimensional e não afeta α* (a CPO da carteira não contém β — daí a miopia); ele
-governa apenas a recorrência A_t e, portanto, as frações de consumo θ_t. Declarar
-o valor anual evita a ambiguidade de "β = 0.96" sem dizer a que período se refere.
+Sobre o beta: ele e escolhido em termos anuais e convertido pro periodo dos
+dados, com beta_anual elevado a 1 sobre periodos_por_ano. O beta nao muda a
+carteira otima, porque ele nem aparece na condicao de primeira ordem do alfa, e
+e justamente isso que se chama de miopia. O que ele governa e a recorrencia A_t
+e, por consequencia, as fracoes de consumo. Declarar o valor ao ano evita a
+confusao de dizer "beta = 0.96" sem falar a que periodo se refere.
 """
 
 import argparse
@@ -48,7 +49,7 @@ W0 = 1.0
 
 def _dados_demo(perfil: dict, n: int = 1_050, seed: int = 7) -> pd.DataFrame:
     """
-    Série sintética de retornos (Ibovespa + CDI) na frequência do perfil.
+    Serie inventada de retornos, na frequencia do perfil escolhido.
     """
     
     rng = np.random.default_rng(seed)
