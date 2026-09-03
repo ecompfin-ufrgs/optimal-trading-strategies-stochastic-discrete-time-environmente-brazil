@@ -1,13 +1,15 @@
-"""app.graficos — figuras dos resultados do modelo (F16).
+"""app.graficos: as figuras dos resultados (F16).
 
-Gera em ``results/`` as ilustrações usadas no documento. **Não faz parte da
-esteira**: `app.principal` não importa este módulo, e por isso o matplotlib
-nunca é carregado pela camada web.
+Escreve em results/ as imagens usadas no documento. Este modulo fica fora da
+esteira: o app.principal nao importa ele, e por isso o matplotlib nunca e
+carregado pela camada web, que desenha no navegador a partir do JSON.
 
-Cada figura leva no rodapé a **procedência** — base, janela dos dados,
-parâmetros e o α* da rodada. Assim uma figura solta continua auditável.
+Cada figura leva no rodape as informacoes da rodada que gerou ela: a base, a
+janela dos dados, os parametros e o alfa que saiu. Assim uma figura solta
+continua fazendo sentido, sem depender de um arquivo de metadados a parte que
+poderia ficar desatualizado.
 
-Uso: ``python -m app --graficos`` (os parâmetros são os da própria execução).
+Roda com: python -m app --graficos
 """
 
 import os
@@ -21,12 +23,12 @@ from app import nucleo
 
 DESTINO_PADRAO = "results"
 
-# Grade de γ do gráfico de sensibilidade. Exige uma reotimização por ponto.
+# os valores de gamma do grafico de sensibilidade. Cada ponto refaz a otimizacao.
 GRADE_GAMMA = (1.5, 2.0, 3.0, 5.0, 8.0, 10.0, 15.0, 20.0)
 
 
 def _rodape(fig, texto: str) -> None:
-    """Linha de procedência: subordinada à legenda do documento, não a substitui."""
+    """Escreve a linha de informacoes no rodape da figura."""
     fig.text(0.5, 0.012, texto, ha="center", fontsize=6.5, color="0.45")
     fig.subplots_adjust(bottom=0.22)
 
@@ -50,10 +52,10 @@ def montar_rodape(res: dict, cfg: dict, periodo: tuple[str, str], n_obs: int,
 
 def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
           periodos_por_ano: int, destino: str = DESTINO_PADRAO) -> list[str]:
-    """Gera as seis figuras e devolve os caminhos escritos.
+    """Faz as seis figuras e devolve os caminhos dos arquivos escritos.
 
-    ``res`` é a saída de ``executar_pipeline``; ``mercado`` e ``rf`` são
-    necessários para os dois gráficos que reotimizam (G(α) e α* × γ).
+    O res e o que o executar_pipeline devolveu. O mercado e o rf so sao
+    necessarios para os dois graficos que refazem a otimizacao.
     """
     os.makedirs(destino, exist_ok=True)
     g = float(cfg["gamma"])
@@ -63,7 +65,7 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
 
     R = np.maximum(1.0 + mercado.amostrar(cfg["n_scenarios"], seed=cfg["seed"]), 0.0)
 
-    # ── 1. G(α) × α, marcando a raiz ────────────────────────────────────────
+    # 1. G(alfa) contra alfa, marcando onde cruza o zero
     a_star = float(res["alpha_star"][0])
     grade = np.linspace(a_star - 1.0, a_star + 1.0, 60)
     G = [nucleo.funcao_foc(np.array([a]), R, Rf, g)[0] for a in grade]
@@ -77,7 +79,7 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
     ax.legend()
     escritos.append(_salvar(fig, destino, "foc_G_de_alpha.png", rodape))
 
-    # ── 2. α* × γ (hipérbole de Merton) ─────────────────────────────────────
+    # 2. alfa contra gamma (a hiperbole de Merton)
     alphas = [nucleo.resolver_alpha_otimo(R, Rf, gi)[0] for gi in GRADE_GAMMA]
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(GRADE_GAMMA, alphas, "o-", color="#1f77b4")
@@ -86,7 +88,7 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
     ax.set_title("Sensibilidade da carteira ótima à aversão ao risco")
     escritos.append(_salvar(fig, destino, "alpha_vs_gamma.png", rodape))
 
-    # ── 3. α* × T — a miopia (F12) ──────────────────────────────────────────
+    # 3. alfa contra T, que e a miopia (F12)
     Ts = np.array([1, T // 4, T // 2, 3 * T // 4, T])
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(Ts, np.full(Ts.shape, a_star), "o-", color="#2ca02c")
@@ -95,7 +97,7 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
     ax.set_title("Miopia: α* invariante ao horizonte")
     escritos.append(_salvar(fig, destino, "miopia_alpha_vs_T.png", rodape))
 
-    # ── 4. θ_t ao longo do tempo (F13) ──────────────────────────────────────
+    # 4. as fracoes de consumo ao longo do tempo (F13)
     theta = res["theta"]
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(np.arange(len(theta)), theta, color="#1f77b4")
@@ -104,7 +106,7 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
     ax.set_title(r"Fração de consumo $\theta_t$ — crescente até $\theta_T = 1$")
     escritos.append(_salvar(fig, destino, "theta_t.png", rodape))
 
-    # ── 5. W_t com banda P5–P95 ─────────────────────────────────────────────
+    # 5. a riqueza com a faixa entre os percentis 5 e 95
     t = np.arange(T + 1)
     media, p5, p95 = (res["trajetoria_W_media"], res["trajetoria_W_p5"],
                       res["trajetoria_W_p95"])
@@ -123,7 +125,7 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
     ax2.set_ylabel("P95-P5\n(% da média)", fontsize=8)
     escritos.append(_salvar(fig, destino, "riqueza_W_t.png", rodape))
 
-    # ── 6. Consumo agregado por ano ─────────────────────────────────────────
+    # 6. consumo somado por ano
     c = res["trajetoria_c_media"]
     n_anos = max(1, T // periodos_por_ano)
     por_ano = [c[i * periodos_por_ano:(i + 1) * periodos_por_ano].sum()
