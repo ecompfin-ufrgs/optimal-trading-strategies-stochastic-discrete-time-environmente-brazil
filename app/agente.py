@@ -78,7 +78,7 @@ class Investidor:
         if self._phi_hat is None:
             raise RuntimeError(
                 "chame carteira_otima() antes de fracoes_consumo(): "
-                "as fracoes de consumo dependem do phi, que sai da carteira.
+                "as fracoes de consumo dependem do phi, que sai da carteira."
             )
         self._A = nucleo.recorrencia_A(self._phi_hat, self.beta, self.gamma, self.horizonte)
         return nucleo.fracoes_consumo(self._A, self.gamma)
