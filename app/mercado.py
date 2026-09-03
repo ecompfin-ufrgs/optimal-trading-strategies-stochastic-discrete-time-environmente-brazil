@@ -85,7 +85,7 @@ class RendaVariavel:
         """
         rng = np.random.default_rng(seed)
         mu = self.media()
-        # R = μ + z·cholᵀ,  z ~ N(0, I)   ⇒  Cov(R) = Σ
+        # R = media + z * chol.T, com z normal padrao. Assim a covariancia sai certa.
         chol = np.linalg.cholesky(self.covariancia())
         z = rng.standard_normal((n, mu.shape[0]))
         return mu[None, :] + z @ chol.T
