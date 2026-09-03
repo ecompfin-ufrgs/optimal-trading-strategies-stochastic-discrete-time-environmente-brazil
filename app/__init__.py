@@ -1,8 +1,8 @@
-"""Pacote `app` — aplicação de otimização de portfólio (Samuelson 1969).
+"""Pacote app: o modelo de consumo e portfolio de Samuelson (1969).
 
-Arquitetura *pipes-and-filters*. A esteira liga os módulos na ordem:
+Os modulos rodam nesta ordem:
 
-    dal  →  mercado  →  agente (+ nucleo)  →  principal
+    dal -> mercado -> agente (+ nucleo) -> principal
 
-Ver o desenho completo em ``docs/project/projeto.md``.
+O desenho completo esta em docs/project/projeto.md.
 """
