@@ -6,7 +6,7 @@ testar sozinha (F6 a F11). E a parte "funcional" da separacao pedida no NF5.
 Uma convencao importante: R e rf sao fatores de retorno BRUTO (1.02, 1.008),
 e nao a variacao. Assim o retorno bruto da carteira fica
 
-    R_p = rf + alfa * (R - rf)        e o excesso e (R - rf).
+    R_p = rf + alpha * (R - rf)        e o excesso e (R - rf).
 
 Quem faz a conversao e o app.agente: ele pega os retornos liquidos do mercado,
 soma 1 e corta em zero (a acao nao pode valer menos que nada) antes de chamar
@@ -20,7 +20,7 @@ from scipy import optimize
 _TOL_FALENCIA = 1e-12
 
 # intervalo onde o brentq comeca procurando a raiz (caso de 1 ativo so).
-# Com dados mensais o alfa fica bem longe de 20, mas se G nao trocar de sinal
+# Com dados mensais o alpha fica bem longe de 20, mas se G nao trocar de sinal
 # dentro do intervalo ele vai sendo dobrado ate 8 vezes.
 _BRACKET_INICIAL = 20.0
 _MAX_EXPANSOES = 8
@@ -36,7 +36,7 @@ def funcao_foc(alpha, R, rf, gamma):
 
 
 def _objetivo_J(alpha, R, rf, gamma):
-    """J(alfa) = E[u(R_p)]. E esta funcao que o solver maximiza; a derivada dela e o G."""
+    """J(alpha) = E[u(R_p)]. E esta funcao que o solver maximiza; a derivada dela e o G."""
     excesso = R - rf
     R_p = np.maximum(rf + excesso @ alpha, _TOL_FALENCIA)
     if np.isclose(gamma, 1.0):
@@ -47,9 +47,9 @@ def _objetivo_J(alpha, R, rf, gamma):
 
 
 def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
-    """Acha o alfa que zera a condicao de primeira ordem, G(alfa)=0. (F6)
+    """Acha o alpha que zera a condicao de primeira ordem, G()=0. (F6)
 
-    Como no artigo, o alfa pode ser qualquer numero: pode ficar negativo
+    Como no artigo, o alpha pode ser qualquer numero: pode ficar negativo
     (venda a descoberto) e pode passar de 1 (alavancagem), sem limite.
     Com 2 ativos ou mais usa o SLSQP; com 1 ativo so usa o brentq.
     """
@@ -126,7 +126,7 @@ def funcao_valor(A, W, gamma):
 
 def propagar_riqueza(w0, theta, alpha, R, rf):
     """Simula pra frente (Etapas 5 e 6). Em cada periodo consome theta*W,
-    investe o que sobrou no alfa otimo e calcula a riqueza do periodo seguinte,
+    investe o que sobrou no alpha otimo e calcula a riqueza do periodo seguinte,
     W = poupanca * R_p. (F9, F10)
 
     Recebe: w0 (riqueza inicial), theta (as fracoes de consumo, T+1 valores),
