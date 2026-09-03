@@ -5,7 +5,7 @@ esteira: o app.principal nao importa ele, e por isso o matplotlib nunca e
 carregado pela camada web, que desenha no navegador a partir do JSON.
 
 Cada figura leva no rodape as informacoes da rodada que gerou ela: a base, a
-janela dos dados, os parametros e o alfa que saiu. Assim uma figura solta
+janela dos dados, os parametros e o alpha que saiu. Assim uma figura solta
 continua fazendo sentido, sem depender de um arquivo de metadados a parte que
 poderia ficar desatualizado.
 
