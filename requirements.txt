@@ -1,0 +1,8 @@
+# Bibliotecas usadas no projeto (modelo de Samuelson, 1969).
+
+numpy==2.2.6
+pandas==2.2.3
+scipy==1.15.3
+
+# so pros graficos (python -m app --graficos); o resto do programa nao usa
+matplotlib==3.10.1
