@@ -6,58 +6,59 @@
 
 ### Fontes
 
-Duas séries históricas, uma por mercado, em frequência **mensal** (default) ou **diária**:
+São duas séries históricas, uma para cada mercado. A frequência pode ser mensal, que é o padrão, ou diária:
 
-- **Renda variável** — Ibovespa (`^BVSP`), nível do índice, obtido do Yahoo Finance (chart API pública, via `urllib`).
-- **Renda fixa** — CDI (a taxa livre de risco `R_f`), da API do Banco Central: série SGS **4391** (acumulada no mês, % a.m.) no mensal, série **12** (% a.d.) no diário.
+- Renda variável: o Ibovespa (`^BVSP`), usando o nível do índice. Os dados vêm do Yahoo Finance, pela API pública de gráficos, acessada com o `urllib`.
+- Renda fixa: o CDI, que faz o papel da taxa livre de risco `R_f`. Os dados vêm da API do Banco Central. Quando a base é mensal usa-se a série SGS 4391, que já vem acumulada no mês em % ao mês; quando é diária, a série 12, em % ao dia.
 
 ### Fluxo (transformação) dos dados
 
 O sistema começa obtendo os **dados brutos** do Ibovespa e do CDI. Em seguida, esses dados são transformados em **retornos por período**, que mostram quanto cada mercado ganhou ou perdeu em cada período (mês ou dia, conforme a frequência da ingestão). A partir desses retornos, o sistema calcula os **parâmetros estatísticos** necessários para o modelo, como retorno esperado, risco etc. Por fim, esses parâmetros são usados para gerar as **trajetórias simuladas** de riqueza e consumo do investidor ao longo do tempo, produzindo os resultados finais da aplicação. A informação muda de forma ao longo da esteira:
 
 ```
-   dados brutos          retornos por período        parâmetros           trajetórias
- (ibovespa, cdi)       →      (retornos)       →    (parametros)    →    (em memória)
-                                                                          [resultado]
+   dados brutos          retornos por periodo       parametros          trajetorias
+ (ibovespa, cdi)   ->        (retornos)        ->  (parametros)  ->    (em memoria)
+                                                                        [resultado]
 ```
 
-Os dados brutos e derivados são guardados de forma permanente em **SQLite** (NF6) pela camada DAL (Data Access Layer); o restante da sequência de etapas de processamento dos dados, o pipeline, lê do banco e não refaz o download a cada execução.
+Os dados brutos e os derivados ficam guardados de forma permanente em SQLite (NF6), e quem cuida disso é a camada DAL (Data Access Layer). O resto da sequência de etapas de processamento, o pipeline, lê do banco e não refaz o download a cada execução.
 
 ### Modelo de dados (esquema SQLite)
 
-Optou-se por **uma tabela de dados brutos por mercado** e uma tabela de **retornos** já alinhados por data, consumida pela calibração.
+A escolha foi ter uma tabela de dados brutos para cada mercado e mais uma tabela com os retornos já alinhados por data, que é a tabela que a calibração usa.
 
 #### Diagrama
 
 ```
-┌────────────────┐          ┌────────────────┐
-│   ibovespa     │          │      cdi       │
-├────────────────┤          ├────────────────┤
-│ data  TEXT PK  │          │ data  TEXT PK  │
-│ fechamento REAL│          │ cdi   REAL     │
-└───────┬────────┘          └───────┬────────┘
-        │ retorno do índice         │ cdi = R_f
-        │ (alinhado por data)       │ (alinhado por data)
-        └─────────────┬─────────────┘
-                      ▼
-             ┌────────────────┐
-             │    retornos    │
-             ├────────────────┤
-             │ data  TEXT PK  │
-             │ ibov  REAL     │
-             │ cdi   REAL     │
-             └───────┬────────┘
-                     │ calibração (Etapa 0): μ̂, Σ̂, R_f
-                     ▼
-             ┌────────────────┐
-             │   parametros   │
-             ├────────────────┤
-             │ chave TEXT PK  │
-             │ valor REAL     │
-             └────────────────┘
+  +----------------+          +----------------+
+  |   ibovespa     |          |      cdi       |
+  +----------------+          +----------------+
+  | data  TEXT PK  |          | data  TEXT PK  |
+  | fechamento REAL|          | cdi   REAL     |
+  +-------+--------+          +-------+--------+
+          |  retorno do indice        |  cdi = R_f
+          |  (alinhado por data)      |  (alinhado por data)
+          +------------+--------------+
+                       |
+                       v
+              +----------------+
+              |    retornos    |
+              +----------------+
+              | data  TEXT PK  |
+              | ibov  REAL     |
+              | cdi   REAL     |
+              +-------+--------+
+                      |  calibracao (Etapa 0): media, covariancia, R_f
+                      v
+              +----------------+
+              |   parametros   |
+              +----------------+
+              | chave TEXT PK  |
+              | valor REAL     |
+              +----------------+
 ```
 
-> A ligação entre `ibovespa`/`cdi` e `retornos` é **por data** (mesma chave `data`): `retornos` é uma tabela *derivada* (calculada pela DAL a partir das brutas), não uma referência relacional. Isto é, as tabelas de dados do Ibovespa e do CDI estão conectadas às "retornos" apenas pelo fato de usarem o mesmo identificador de tempo (a coluna de data), mas sem uma ligação fixa dentro do banco de dados. O sistema pega os dados brutos dessas duas fontes e calcula uma nova tabela chamada "retornos", que mostra a variação de cada mês. Assim, essa tabela não é uma fonte original de dados nem depende diretamente de outra dentro do banco, ela é gerada automaticamente a partir das outras duas sempre que necessário.
+A ligação entre `ibovespa`/`cdi` e `retornos` é feita pela data, já que as três tabelas usam a mesma chave `data`. Isto é, as tabelas de dados do Ibovespa e do CDI estão conectadas às "retornos" apenas pelo fato de usarem o mesmo identificador de tempo (a coluna de data), mas sem uma ligação fixa dentro do banco de dados. O sistema pega os dados brutos dessas duas fontes e calcula uma nova tabela chamada "retornos", que mostra a variação de cada mês. Assim, essa tabela não é uma fonte original de dados nem depende diretamente de outra dentro do banco, ela é gerada automaticamente a partir das outras duas sempre que necessário.
 
 #### Dicionário de dados
 
@@ -70,15 +71,14 @@ Optou-se por **uma tabela de dados brutos por mercado** e uma tabela de **retorn
 | `retornos` | `data` | TEXT | PK, `AAAA-MM`\|`AAAA-MM-DD`, não nulo | período da observação | `2000-02` |
 | `retornos` | `ibov` | REAL | não nulo | retorno do Ibovespa no período (decimal) | `-0.0315` |
 | `retornos` | `cdi` | REAL | não nulo | retorno livre de risco do período (decimal) | `0.0149` |
-
-> A granularidade da coluna `data` acompanha a frequência da ingestão: `AAAA-MM` no mensal (default), `AAAA-MM-DD` no diário. As duas frequências vivem em bancos separados, nunca na mesma tabela.
 | `parametros` | `chave` | TEXT | PK, não nulo | nome do parâmetro calibrado | `mu_ibov` |
 | `parametros` | `valor` | REAL | não nulo | valor do parâmetro | `0.0107` |
 
+O formato da coluna `data` muda junto com a frequência da ingestão: fica `AAAA-MM` no mensal, que é o padrão, e `AAAA-MM-DD` no diário. As duas frequências ficam em bancos separados, e nunca na mesma tabela.
 
 ### Formato dos arquivos (CSV)
 
-Entrada/saída em CSV espelha o framework de referência: coluna `data` na primeira posição (formato `AAAA-MM`), uma coluna por ativo, valores em **decimal** (ex.: `0.0213`, não `2,13%`), **sem células vazias** (NaN).
+Os arquivos CSV de entrada e de saída seguem o mesmo formato do framework de referência: a coluna `data` vem primeiro, no formato `AAAA-MM`, e depois uma coluna para cada ativo. Os valores ficam sempre em decimal (`0.0213`, e não `2,13%`) e não pode haver célula vazia.
 
 ```csv
 data,ibov,cdi
@@ -88,15 +88,14 @@ data,ibov,cdi
 
 ### Regras de integridade
 
-- `data` única por tabela (chave primária), no formato `AAAA-MM` (mensal) ou `AAAA-MM-DD` (diário) — uma frequência por banco.
-- Sem valores ausentes (NaN) nas colunas de retorno.
-- Valores sempre em **decimal**, nunca em porcentagem.
-- `retornos` cobre apenas as datas presentes em **ambas** as tabelas brutas
-  `ibovespa` e `cdi` (interseção por data — alinhamento sem buracos).
+- A coluna `data` é única dentro de cada tabela, porque é a chave primária. O formato é `AAAA-MM` no mensal e `AAAA-MM-DD` no diário, com uma frequência por banco.
+- Não pode haver valor faltando (NaN) nas colunas de retorno.
+- Os valores ficam sempre em decimal, nunca em porcentagem.
+- A tabela `retornos` só tem as datas que aparecem nas duas tabelas brutas ao mesmo tempo, isto é, a interseção entre `ibovespa` e `cdi`. Assim o alinhamento não fica com buracos.
 
 ### Dados em trânsito (pipes)
 
-Entre os filtros, os dados trafegam em memória como `pandas.DataFrame` (séries de preços/retornos) e `numpy.ndarray` (μ̂, Σ̂, cenários `R`, trajetórias `W_t`/`c_t*`). Apenas as pontas da esteira (DAL e relatório/web) tocam o disco/banco.
+Entre uma etapa e outra os dados ficam só na memória. As séries de preços e de retornos andam como `pandas.DataFrame` e o resto (as médias, a matriz de covariância, os cenários e as trajetórias de riqueza e consumo) como `numpy.ndarray`. Só as pontas da esteira encostam no disco: a DAL de um lado e o relatório ou a web do outro.
 
 ---
 
@@ -104,73 +103,73 @@ Entre os filtros, os dados trafegam em memória como `pandas.DataFrame` (séries
 
 <!--Liste os módulos e pacotes e apresente uma figura com a estrutura que os liga-->
 
-A aplicação usa o modelo arquitetural **"pipes and filters"**: os dados percorrem uma esteira de etapas de processamento (os *filtros*), ligadas por *pipes* (os dados que saem de uma etapa e entram na próxima). Cada filtro tem uma única responsabilidade, recebe dados, transforma e os repassa adiante.
+A aplicação segue o modelo arquitetural conhecido como pipes and filters. A ideia é que os dados passem por uma esteira de etapas de processamento, que são os filtros, ligadas pelos dados que saem de uma etapa e entram na próxima, que são os pipes. Cada filtro tem uma responsabilidade só: recebe dados, transforma e repassa adiante.
 
-A **camada de apresentação** (a interface web) segue um padrão diferente e complementar: **MVC (Model-View-Controller)**. Enquanto o núcleo de cálculo usa *pipes-and-filters*, a apresentação separa **Model** (o pacote `app`, acessado por `app.principal.executar_pipeline` — os dados e a lógica de negócio), **Controller** (recebe os parâmetros do usuário, monta o `config` e chama o Model) e **View** (renderiza os resultados: carteira ótima, trajetórias, gráficos). Assim, o núcleo fica isolado da interface.
+A camada de apresentação, que é a interface web, usa um padrão diferente, o MVC (Model-View-Controller). Enquanto o núcleo de cálculo é pipes and filters, a apresentação separa três papéis. O Model é o pacote `app`, acessado pela função `app.principal.executar_pipeline`, e é onde ficam os dados e a lógica de negócio. O Controller recebe os parâmetros que o usuário digitou, monta o `config` e chama o Model. A View mostra os resultados: a carteira ótima, as trajetórias e os gráficos. Dessa forma o núcleo fica isolado da interface.
 
-Adota-se a separação de paradigmas (NF5):
+O requisito NF5 pede também a separação de paradigmas, que ficou assim:
 
-- **POO guarda o estado** — as classes `RendaFixa`, `RendaVariavel` e `Investidor` encapsulam dados e comportamento das entidades econômicas.
-- **Funções puras fazem a matemática** — o módulo `nucleo` implementa as equações do modelo (G(α), Φ̂, recorrência A_t, função valor) como funções que só recebem números/arrays e devolvem números, sem estado externo — fáceis de testar isoladamente.
+- A parte orientada a objetos guarda o estado. As classes `RendaFixa`, `RendaVariavel` e `Investidor` carregam os dados e o comportamento das entidades econômicas.
+- A parte funcional faz a matemática. O módulo `nucleo` tem as equações do modelo (a função G(alpha), o Phi, a recorrência A_t e a função valor) escritas como funções que só recebem números e arrays e devolvem números, sem depender de nada de fora. Isso deixa cada equação fácil de testar sozinha.
 
 ### Módulos e pacotes
 
 | Módulo / pacote | Papel | Requisitos |
 |---|---|---|
-| `app.dal` | **DAL** — acesso a dados (download, gravação/leitura SQLite) | F1, NF6 |
-| `app.ingestao` | **ingestão** — baixa Ibovespa+CDI e popula o SQLite (`montar_base`) | F1, NF6 |
-| `app.mercado` | mercados: `RendaFixa` (CDI) e `RendaVariavel` (Ibovespa) | F2, F3, F4 |
-| `app.agente` | indivíduo: classe `Investidor` (γ, β, W₀, T, CRRA) | F5, F6, F8, F9 |
-| `app.nucleo` | funções puras com a matemática do modelo | F6–F11 |
-| `app.principal` | **orquestrador** da esteira pipes-and-filters | F10, NF5 |
-| `app.graficos` | figuras dos resultados em `results/` (fora da esteira) | F16 |
-| `app.__main__` | ponto de entrada `python -m app` — roda a **base diária** (usa o banco real se existir) | NF5 |
-| `web` (à parte) | interface web sobre o módulo principal | F15, F16, NF2 |
+| `app.dal` | DAL, o acesso a dados: download, gravação e leitura no SQLite | F1, NF6 |
+| `app.ingestao` | ingestão: baixa Ibovespa e CDI e enche o SQLite (`montar_base`) | F1, NF6 |
+| `app.mercado` | os mercados: `RendaFixa` (CDI) e `RendaVariavel` (Ibovespa) | F2, F3, F4 |
+| `app.agente` | o indivíduo: a classe `Investidor` (gamma, beta, W0, T, CRRA) | F5, F6, F8, F9 |
+| `app.nucleo` | as funções puras com a matemática do modelo | F6–F11 |
+| `app.principal` | o orquestrador, que liga as etapas na ordem | F10, NF5 |
+| `app.graficos` | as figuras dos resultados em `results/`, fora da esteira | F16 |
+| `app.__main__` | o ponto de entrada `python -m app`, que roda a base diária usando o banco real se ele existir | NF5 |
+| `web` (à parte) | a interface web em cima do módulo principal | F15, F16, NF2 |
 
-### Figura — esteira do pipeline
+### Figura: esteira do pipeline
 
 ```
 [ SQLite / CSV ]
-      │  preços
-      ▼
-┌──────────────────────────┐
-│ DAL — acesso a dados      │   (F1, NF6)
-│ baixar · gravar · ler     │
-└────────────┬─────────────┘
-             │  retornos (Ibovespa, CDI)
-             ▼
-┌──────────────────────────┐
-│ Mercado                   │   (F2, F3, F4)
-│ RendaFixa     → R_f       │
-│ RendaVariavel → μ̂, Σ̂, R  │
-└────────────┬─────────────┘
-             │  parâmetros do modelo
-             ▼
-┌──────────────────────────┐
-│ Agente + Núcleo           │   (F5–F8, F11)
-│ Investidor; α*, A_t, θ_t  │
-└────────────┬─────────────┘
-             │  política ótima (α*, θ_t)
-             ▼
-┌──────────────────────────┐
-│ Simulação forward         │   (F9, F10)
-│ W_t, c_t*, S_t            │
-└────────────┬─────────────┘
-             │  trajetórias + métricas
-             ▼
-┌──────────────────────────┐
-│ Relatório (tabelas/graf)  │   (F16)
-└────────────┬─────────────┘
-             │  resultados
-             ▼
-┌──────────────────────────┐
-│ Interface Web (à parte)   │   (F15, F16, NF2)
-└──────────────────────────┘
-
-Orquestração de toda a esteira: módulo principal (app.principal, NF5)
-Validação (F12–F14): testes sobre α*, θ_t e a convergência a Merton
-Ingestão (app.ingestao): baixa Ibovespa+CDI e popula o [SQLite] do topo da esteira
+      |  precos
+      v
++-----------------------------+
+| DAL - acesso a dados        |   (F1, NF6)
+| baixar, gravar, ler         |
++-----------------------------+
+      |  retornos (Ibovespa, CDI)
+      v
++-----------------------------+
+| Mercado                     |   (F2, F3, F4)
+| RendaFixa     -> R_f        |
+| RendaVariavel -> media,     |
+|                  covariancia|
++-----------------------------+
+      |  parametros do modelo
+      v
++-----------------------------+
+| Agente + Nucleo             |   (F5-F8, F11)
+| Investidor; alfa*, A_t,     |
+| theta_t                     |
++-----------------------------+
+      |  politica otima (alfa*, theta_t)
+      v
++-----------------------------+
+| Simulacao forward           |   (F9, F10)
+| W_t, c_t*, S_t              |
++-----------------------------+
+      |  trajetorias + metricas
+      v
++-----------------------------+
+| Relatorio (tabelas/graficos)|   (F16)
++-----------------------------+
+      |  resultados
+      v
++-----------------------------+
+| Interface Web (a parte)     |   (F15, F16, NF2)
++-----------------------------+
 ```
+
+Quem liga tudo isso na ordem certa é o módulo principal (`app.principal`, NF5). A validação (F12 a F14) fica nos testes, que conferem o alfa ótimo, as frações de consumo e a convergência a Merton. A ingestão (`app.ingestao`) é o passo que baixa Ibovespa e CDI e enche o SQLite que aparece lá no topo do desenho.
 
 ---
 
@@ -178,9 +177,9 @@ Ingestão (app.ingestao): baixa Ibovespa+CDI e popula o [SQLite] do topo da este
 
 <!--Dizer o que cada módulo e pacote faz, incluindo a assinatura das funções e/ou classes-->
 
-### `app.dal` — Data Access Layer (F1, NF6)
+### `app.dal`: Data Access Layer (F1, NF6)
 
-Leitura das fontes externas e persistência no SQLite. É o único módulo que conhece o banco e o disco.
+Faz a leitura das fontes externas e guarda tudo no SQLite. É o único módulo que sabe que existe um banco e um disco.
 
 ```python
 def baixar_precos(ativos: list[str], inicio: str, fim: str,
@@ -201,11 +200,11 @@ def calcular_retornos(precos: "DataFrame") -> "DataFrame":
     """Converte preços em retornos por período, alinhados por data."""
 ```
 
-> **Frequência (mensal ou diária).** `frequencia="1mo"` (default) produz `data` no formato `AAAA-MM`; `"1d"` produz `AAAA-MM-DD`. Muda também a fonte do CDI: série **4391** (acumulada no mês, % a.m.) contra série **12** (% a.d.). A SGS recusa séries diárias de mais de 10 anos por requisição (HTTP 406), então a DAL fatia o período em janelas de 10 anos e concatena, removendo a data repetida na fronteira.
+O parâmetro `frequencia` muda mais coisas do que parece. Com `"1mo"`, que é o padrão, a coluna `data` sai no formato `AAAA-MM`; com `"1d"` sai como `AAAA-MM-DD`. Muda também de onde vem o CDI: a série 4391, acumulada no mês, contra a série 12, que é diária. E tem um detalhe da API do Banco Central: ela recusa pedidos de série diária com mais de 10 anos e responde com HTTP 406. Por causa disso a DAL corta o período em janelas de 10 anos, faz um pedido para cada uma e depois junta tudo, tomando o cuidado de jogar fora a data repetida na emenda.
 
-### `app.ingestao` — Ingestão da base real (F1, NF6)
+### `app.ingestao`: Ingestão da base real (F1, NF6)
 
-Passo operacional que **popula** o banco: baixa Ibovespa (Yahoo) + CDI (Banco Central), calcula os retornos alinhados e grava as tabelas `ibovespa`/`cdi`/`retornos`. Rodado uma vez (`python -m app.ingestao`); depois o pipeline lê do SQLite.
+É o passo que enche o banco. Ele baixa o Ibovespa no Yahoo e o CDI no Banco Central, calcula os retornos alinhados e grava as tabelas `ibovespa`, `cdi` e `retornos`. Roda uma vez, com `python -m app.ingestao`, e daí em diante o pipeline só lê do SQLite.
 
 ```python
 BANCO_PADRAO = {"1mo": "data/mercado.db", "1d": "data/mercado_diario.db"}
@@ -215,16 +214,16 @@ def montar_base(db_path: str | None = None, inicio: str = "2000-01-01",
     """Baixa Ibovespa+CDI, calcula retornos e grava as 3 tabelas. (F1, NF6)"""
 ```
 
-Cada frequência tem seu banco, de modo que uma ingestão não sobrescreve a outra:
+Cada frequência tem o seu próprio banco, para que uma ingestão não apague a outra:
 
 ```
 python -m app.ingestao                      # mensal  -> data/mercado.db
 python -m app.ingestao 2022-05-22 --diario  # diário  -> data/mercado_diario.db
 ```
 
-### `app.mercado` — Mercados (F2, F3, F4)
+### `app.mercado`: Mercados (F2, F3, F4)
 
-Encapsula cada mercado e expõe os insumos que o agente precisa (Etapa 0 do artigo: calibração de μ̂, Σ̂, R_f).
+Cada classe representa um mercado e entrega o que o agente precisa. Isso corresponde à Etapa 0 do artigo, que é a calibração da média, da matriz de covariância e da taxa livre de risco.
 
 ```python
 class RendaFixa:
@@ -237,16 +236,16 @@ class RendaVariavel:
     """Mercado de renda variável (Ibovespa) — distribuição dos retornos. (F4)"""
     def __init__(self, retornos: "DataFrame") -> None: ...
     def media(self) -> "ndarray":
-        """Vetor de retornos esperados estimado μ̂. (F2, F4)"""
+        """Vetor de retornos esperados estimado mu_chapeu. (F2, F4)"""
     def covariancia(self) -> "ndarray":
-        """Matriz de covariância estimada Σ̂. (F2, F4)"""
+        """Matriz de covariância estimada sigma_chapeu. (F2, F4)"""
     def amostrar(self, n: int, seed: int | None = None) -> "ndarray":
-        """Gera n cenários de retorno R ~ Normal(μ̂, Σ̂) para o Monte Carlo."""
+        """Gera n cenários de retorno R normalmente distribuido para o Monte Carlo."""
 ```
 
-### `app.agente` — Indivíduo / Investidor (F5, F6, F8, F9)
+### `app.agente`: Indivíduo / Investidor (F5, F6, F8, F9)
 
-Encapsula as primitivas do agente e orquestra sua decisão (delega a matemática ao `nucleo`).
+Guarda as características do agente (aversão ao risco, impaciência, riqueza inicial e horizonte) e conduz a decisão dele, deixando as contas em si por conta do `nucleo`.
 
 ```python
 class Investidor:
@@ -259,35 +258,35 @@ class Investidor:
         """u'(c) = c^(−γ). (F5)"""
     def carteira_otima(self, mercado: "RendaVariavel", rf: float,
                        **opts) -> "ndarray":
-        """Carteira ótima α* via FOC G(α*)=0; α sempre irrestrito. (F6)"""
+        """Carteira ótima alpha* via FOC G(alpha*)=0; alpha sempre irrestrito. (F6)"""
     def fracoes_consumo(self) -> "ndarray":
-        """Frações de consumo θ_t = A_t^(−1/γ), t=0..T. (F8, F9)"""
+        """Frações de consumo theta_t = A_t^(−1/γ), t=0..T. (F8, F9)"""
 ```
 
-> **O fator de desconto β e a frequência dos dados.** β é **adimensional** e, sob a hipótese i.i.d., **não aparece na CPO de α\*** (equação 30) — é justamente por isso que a carteira ótima é atemporal e a miopia vale. β governa **apenas** a recorrência `A_t` e, portanto, as frações de consumo θ_t.
->
-> Como β entra elevado a `t`, e `t` conta **períodos**, o mesmo número descreve agentes diferentes conforme a frequência: β = 0,96 ao mês equivale a 0,613 ao ano, enquanto β = 0,96 ao pregão equivale a 3,4×10⁻⁵ ao ano — um agente que consome 92% da riqueza no primeiro ano. Para evitar essa ambiguidade, `app.__main__` fixa o desconto em termos **anuais** (`BETA_ANUAL = 0.96`) e converte: `β_pregão = β_anual^(1/252) = 0,999838`. Ao reportar resultados, declare sempre as duas formas.
+Vale explicar como o beta se relaciona com a frequência dos dados. O beta é um número sem unidade e, com a hipótese de retornos independentes e identicamente distribuídos, ele nem aparece na condição de primeira ordem que resolve o alpha. É exatamente por isso que a carteira ótima não muda com o tempo e a miopia acontece. Isso foi conferido no número: variando o beta de 0,90 até 0,9999 na base diária, o alfa ótimo e o Phi ficam iguais. O que o beta governa é a recorrência `A_t` e, por consequência, as frações de consumo.
 
-### `app.nucleo` — Funções puras / matemática do modelo (F6–F11)
+O problema é que o beta entra elevado a `t`, e `t` conta períodos, então o mesmo número descreve investidores completamente diferentes conforme a frequência dos dados. Um beta de 0,96 ao mês equivale a 0,613 ao ano, mas um beta de 0,96 por pregão equivale a 3,4 × 10⁻⁵ ao ano, o que seria um investidor que consome 92% da riqueza logo no primeiro ano. Para não cair nessa confusão, o `app.__main__` fixa o desconto em termos anuais (`BETA_ANUAL = 0.96`) e converte para o período: no diário fica `beta_pregao = beta_anual^(1/252) = 0,999838`. Ao reportar um resultado é bom sempre dizer as duas formas.
 
-Sem estado. Cada função implementa uma equação do artigo e é testável isolada.
+### `app.nucleo`: Funções puras / matemática do modelo (F6–F11)
+
+Cada função é uma equação do artigo e dá para testar isolada das outras.
 
 ```python
 def funcao_foc(alpha, R, rf, gamma):
-    """G(α) = E[(R − rf·1)/(rf + αᵀ(R − rf·1))^γ]. (F6)"""
+    """G(alpha) = E[(R − rf·1)/(rf + alpha^T(R − rf·1))^γ]. (F6)"""
 
 def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
-    """Resolve G(α*)=0 — α ∈ ℝ^N irrestrito (ver nota abaixo);
+    """Resolve G(alpha*)=0 — alpha pertence a R^N irrestrito (ver nota abaixo);
     SLSQP para N≥2, brentq para N=1. (F6)"""
 
 def phi_chapeu(alpha, R, rf, gamma):
-    """Φ̂ = E[R_p^(1−γ)] do portfólio ótimo. (F7)"""
+    """Phi_chapeu = E[R_p^(1−γ)] do portfólio ótimo. (F7)"""
 
 def recorrencia_A(phi, beta, gamma, T):
-    """A_T=1; A_t=[1+(β·A_{t+1}·Φ̂)^(1/γ)]^γ, t=T−1..0. (F8)"""
+    """A_T=1; A_t=[1+(beta·A_{t+1}·Phi_chapeu)^(1/γ)]^γ, t=T−1..0. (F8)"""
 
 def fracoes_consumo(A, gamma):
-    """θ_t = A_t^(−1/γ). (F8)"""
+    """theta_t = A_t^(−1/γ). (F8)"""
 
 def propagar_riqueza(w0, theta, alpha, R, rf):
     """Forward pass: W_{t+1}=S_t·R*_{p,t+1}; devolve W_t, c_t*, S_t. (F9, F10)"""
@@ -296,23 +295,22 @@ def funcao_valor(A, W, gamma):
     """V_t(W) = A_t·W^(1−γ)/(1−γ). (F11)"""
 ```
 
-> **Restrição sobre os pesos α (domínio).** `resolver_alpha_otimo` é **sempre irrestrito**: `α ∈ ℝ^N`, admitindo **short** (α<0) e **alavancagem** (Σα>1), sem teto `α_max`. Não há como impor long-only ou limites. Para N=1 o `brentq` parte do bracket `[−20, 20]` e o duplica até haver troca de sinal de G; se não houver (arbitragem na amostra, isto é, nenhum cenário com R < R_f), não existe α* finito e a função levanta `RuntimeError`.
+Uma observação sobre o domínio dos pesos. A função `resolver_alpha_otimo` é sempre irrestrita, ou seja, o alfa pode ser qualquer número real, o que admite venda a descoberto (alfa negativo) e alavancagem (a soma dos pesos passando de 1), sem nenhum teto. Não existe opção para exigir carteira só comprada nem para impor limites. No caso de um ativo só, o `brentq` começa procurando no intervalo de −20 a 20 e vai dobrando esse intervalo até a função G trocar de sinal. Se ela nunca trocar, quer dizer que não existe nenhum cenário com o retorno do ativo abaixo da taxa livre de risco. Nesse caso não há alpha ótimo finito e a função levanta um `RuntimeError` em vez de devolver um valor qualquer.
 
-### `app.principal` — Orquestrador (F10, NF5)
+### `app.principal`: Orquestrador (F10, NF5)
 
-Liga os filtros na ordem da esteira; é o ponto de entrada chamado pela web.
+Liga os filtros na ordem da esteira. É a função que a web chama.
 
 ```python
 def executar_pipeline(config: dict) -> dict:
-    """DAL → mercado → agente → simulação; devolve o resultado (α*, θ_t,
-    trajetórias, métricas) que a web consome. (NF5)"""
+    """DAL → mercado → agente → simulação; devolve o resultado (alpha*, theta_t, trajetórias, métricas) que a web consome. (NF5)"""
 ```
 
-> **`n_scenarios` depende da frequência dos dados.** O default de 80 000 serve para séries **mensais**. Medido na base diária 2022–2026, com 80 000 cenários α\* varia de −0,125 a +0,148 conforme a semente; com 8 milhões converge para o valor de Merton (+0,038). Não há verificação automática: cabe a quem chama dimensionar `n_scenarios` conforme a frequência da base — o `app.__main__` usa 4 milhões no diário e 200 mil no mensal.
+O número de cenários (`n_scenarios`) precisa de atenção, porque depende da frequência dos dados. O padrão de 80 000 serve bem para séries mensais. Quem chama a função precisa escolher o `n_scenarios` de acordo com a base. O `app.__main__` usa 4 milhões no diário e 200 mil no mensal.
 
-### `app.graficos` — Figuras dos resultados (F16)
+### `app.graficos`: Figuras dos resultados (F16)
 
-Gera em `results/` as seis figuras usadas no documento: `G(α)` com a raiz marcada, `α*` × γ (hipérbole de Merton), `α*` × T (a miopia como linha horizontal), `θ_t`, trajetória de `W_t` com banda P5–P95, e consumo agregado por ano.
+Gera em `results/` as seis figuras usadas no documento: a curva G(alpha) com a raiz marcada, o alfa ótimo contra gamma (a hipérbole de Merton), o alfa ótimo contra o horizonte T (que fica reto, mostrando a miopia), as frações de consumo, a trajetória da riqueza com a faixa entre os percentis 5 e 95, e o consumo somado por ano.
 
 ```python
 def gerar(res, mercado, rf, cfg, rodape, periodos_por_ano,
@@ -320,23 +318,23 @@ def gerar(res, mercado, rf, cfg, rodape, periodos_por_ano,
     """Escreve as figuras e devolve os caminhos."""
 ```
 
-Acionado por `python -m app --graficos`, na mesma execução que calcula — os parâmetros das figuras são os da linha de comando, sem repetição nem chance de divergência.
+O módulo é acionado por `python -m app --graficos`, na mesma execução que faz as contas, então os parâmetros das figuras são os mesmos da linha de comando e não há como um divergir do outro.
 
-> **Isolamento do matplotlib.** `app.principal` **não** importa este módulo, e o import é tardio dentro do `__main__`. Sem a flag, o matplotlib nem é carregado. Isso importa para a camada web: ela consome só o `executar_pipeline` e desenha no navegador (a partir do JSON), sem pagar o custo de inicialização nem o risco de um backend não thread-safe. O `tests/20_graficos.ipynb` tem uma asserção que trava essa fronteira.
+O matplotlib fica isolado de propósito. O `app.principal` não importa este módulo, e no `__main__` o import só acontece se a flag for usada. Sem a flag o matplotlib nem chega a ser carregado. Isso importa para a camada web, que consome só o `executar_pipeline` e desenha no navegador a partir do JSON.
 
-> **Procedência impressa na figura.** Cada PNG leva no rodapé a base, a janela dos dados, γ, β anual, T, `n_scenarios`, semente e o α* da rodada. Optou-se por isso em vez de um arquivo de metadados paralelo: a legenda é impossível de separar do resultado e acompanha a figura para dentro do documento. As figuras são **versionadas** — o texto as referencia e a banca deve vê-las sem rodar nada.
+Cada PNG leva no rodapé as informações da rodada que o gerou: a base, a janela dos dados, gamma, beta anual, T, o `n_scenarios`, a semente e o alfa ótimo. A alternativa seria guardar isso num arquivo de metadados separado, mas aí seria fácil o arquivo ficar para trás; do jeito que está, a legenda acompanha a imagem quando ela vai para dentro do documento. As figuras ficam versionadas no repositório, porque o texto se refere a elas.
 
-> **Custo.** Dois gráficos reotimizam: `G(α)` avalia a FOC em 60 pontos (~6 s) e `α*` × γ refaz a otimização em 8 valores (~12 s). Por isso ficam atrás da flag, e **não devem ir para um endpoint web**. Já `α*` × T sai de graça: α* não depende de T, e é justamente o achatamento que o gráfico demonstra.
+Dois desses gráficos refazem a otimização e por isso custam tempo: o G(alpha) avalia a condição de primeira ordem em 60 pontos e o alpha contra gamma refaz a otimização em 8 valores. Já o gráfico do alpha contra T sai de graça, porque o alfa não depende de T, e é justamente esse achatamento que o gráfico serve para mostrar.
 
-### `web` (à parte) — Interface (F15, F16, NF2)
+### `web` (à parte): Interface (F15, F16, NF2)
 
-A camada de apresentação segue o padrão **MVC (Model-View-Controller)**, sobre o módulo principal:
+A camada de apresentação usa o padrão MVC (Model-View-Controller) em cima do módulo principal:
 
-- **Model** — o pacote `app` (a esteira *pipes-and-filters*), acessado por `app.principal.executar_pipeline`. Concentra os dados e a lógica de negócio; não conhece a web.
-- **Controller** — recebe os parâmetros do investidor (γ, β, W₀, T, ativos), monta o `config`, chama o Model e repassa o resultado à View (**F15**).
-- **View** — renderiza a saída: carteira ótima α*, trajetórias de consumo/riqueza e gráficos (**F16**).
+- Model: o pacote `app`, que é a esteira pipes and filters, acessado pela função `app.principal.executar_pipeline`. É onde ficam os dados e a lógica de negócio, e ele não sabe nada sobre a web.
+- Controller: recebe os parâmetros do investidor (gamma, beta, W0, T e os ativos), monta o `config`, chama o Model e entrega o resultado para a View (F15).
+- View: mostra a saída, ou seja, a carteira ótima, as trajetórias de consumo e de riqueza e os gráficos (F16).
 
-Vive em projeto separado. A separação MVC permite trocar a interface (web ou outra UI) sem tocar no Model (o núcleo de cálculo).
+Essa parte vive em um projeto separado. A vantagem da separação em MVC é poder trocar a interface, seja outra tela web ou outro tipo de interface, sem precisar mexer no Model, que é o núcleo de cálculo.
 
 ---
 
@@ -344,13 +342,13 @@ Vive em projeto separado. A separação MVC permite trocar a interface (web ou o
 
 <!--Descrever o algoritmo implementado em cada função-->
 
-> **Estado:** os algoritmos das Etapas 0–6 estão **implementados e testados** (tarefas 4–7, um notebook por requisito em `tests/`). A integração com o QuantEcon (tarefa 8) está feita em `tests/19_algoritmo_quantecon.ipynb`, que reproduz a solução analítica por programação dinâmica (quadratura `qnwnorm` + `brentq`) e confirma a miopia. 
+Situação atual: os algoritmos das Etapas 0 a 6 estão implementados e testados (tarefas 4 a 7, com um notebook por requisito dentro de `tests/`). A integração com o QuantEcon (tarefa 8) está no `tests/19_algoritmo_quantecon.ipynb`, que refaz a solução por programação dinâmica com quadratura (`qnwnorm` mais `brentq`) e confirma a miopia.
 
-1. **Calibração (Etapa 0)** — `media`/`covariancia`: estimadores amostrais de μ̂ e Σ̂ sobre os retornos; R_f vem do CDI.
-2. **Carteira ótima α\* (Etapa 1)** — `resolver_alpha_otimo`: maximiza J(α)=E[u(R_p)] resolvendo a FOC `G(α)=0` via **SLSQP** (N≥2) ou **brentq** (N=1), com `G`/J avaliados por **Monte Carlo** sobre cenários R ~ Normal(μ̂, Σ̂). **α sempre irrestrito** (short e alavancagem, sem teto). Resolvida **uma única vez** (miopia).
-3. **Φ̂ (Etapa 2)** — `phi_chapeu`: esperança `E[R_p^(1−γ)]` do portfólio ótimo, calculada **uma vez** e reutilizada.
+1. Calibração (Etapa 0). As funções `media` e `covariancia` calculam os estimadores amostrais em cima dos retornos, e a taxa livre de risco vem do CDI.
+2. Carteira ótima (Etapa 1). A função `resolver_alpha_otimo` maximiza J(alpha) = E[u(R_p)] resolvendo a condição de primeira ordem G(alpha) = 0. Para dois ativos ou mais usa o SLSQP; para um ativo só usa o `brentq`. As esperanças são calculadas por Monte Carlo sobre cenários sorteados de uma normal com a média e a covariância estimadas. O alpha é sempre irrestrito, admitindo venda a descoberto e alavancagem, sem teto. Isso é resolvido uma vez só, por causa da miopia.
+3. Phi (Etapa 2). A função `phi_chapeu` calcula a esperança E[R_p^(1−gamma)] do portfólio ótimo, também uma vez só, e o valor é reaproveitado depois.
+4. Coeficientes A_t e frações de consumo (Etapas 3 e 4). As funções `recorrencia_A` e `fracoes_consumo` fazem a indução retroativa, de t = T até t = 0. Essa parte é pura álgebra, não tem otimização nenhuma.
+5. Simulação para a frente (Etapas 5 e 6). A função `propagar_riqueza` faz, em cada período, o consumo `c_t* = theta_t · W_t`, investe o que sobrou seguindo o alpha ótimo e propaga a riqueza para o período seguinte.
+6. Validação (Etapas 7 e 8). A função `funcao_valor` confere a consistência de Bellman, e o teste de miopia verifica que a distância entre os alphas obtidos com horizontes diferentes é menor que um epsilon (F12 a F14).
 
-> As Etapas 3 e 7 também saem no resultado: `A_t` (coeficientes da recorrência) e `valor_V` (função valor V_t avaliada em W₀, requisito **F11**). Antes ficavam internas ao agente e eram descartadas. A simulação devolve, além da média, os percentis **período a período** (`trajetoria_W_p5`/`_mediana`/`_p95`) — sem eles não há banda de confiança, nem no `results/` nem na web.
-4. **Coeficientes A_t e frações θ_t (Etapas 3–4)** — `recorrencia_A` / `fracoes_consumo`: **indução retroativa** de `t=T` até `t=0` (backward pass), puramente algébrica, sem otimização.
-5. **Simulação forward (Etapas 5–6)** — `propagar_riqueza`: a cada t consome `c_t*=θ_t·W_t`, investe a poupança em α* e propaga a riqueza (forward pass).
-6. **Validação (Etapas 7–8)** — `funcao_valor` (consistência de Bellman) e o teste de miopia `‖α*_T − α*_{T'}‖ < ε` (F12–F14).
+As Etapas 3 e 7 também aparecem no resultado final: os coeficientes `A_t` da recorrência e o `valor_V`, que é a função valor avaliada na riqueza inicial (requisito F11). Antes esses dois ficavam escondidos dentro do agente e eram descartados no fim. A simulação devolve, além da média, os percentis período a período (`trajetoria_W_p5`, `_mediana` e `_p95`), que são necessários para desenhar a banda de confiança, tanto nas figuras de `results/` quanto na web.
