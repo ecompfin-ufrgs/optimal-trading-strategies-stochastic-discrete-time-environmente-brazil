@@ -65,7 +65,7 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
 
     R = np.maximum(1.0 + mercado.amostrar(cfg["n_scenarios"], seed=cfg["seed"]), 0.0)
 
-    # 1. G(alfa) contra alfa, marcando onde cruza o zero
+    # 1. G(alpha) contra alpha, marcando onde cruza o zero
     a_star = float(res["alpha_star"][0])
     grade = np.linspace(a_star - 1.0, a_star + 1.0, 60)
     G = [nucleo.funcao_foc(np.array([a]), R, Rf, g)[0] for a in grade]
@@ -79,7 +79,7 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
     ax.legend()
     escritos.append(_salvar(fig, destino, "foc_G_de_alpha.png", rodape))
 
-    # 2. alfa contra gamma (a hiperbole de Merton)
+    # 2. alpha contra gamma (a hiperbole de Merton)
     alphas = [nucleo.resolver_alpha_otimo(R, Rf, gi)[0] for gi in GRADE_GAMMA]
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(GRADE_GAMMA, alphas, "o-", color="#1f77b4")
@@ -88,7 +88,7 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
     ax.set_title("Sensibilidade da carteira ótima à aversão ao risco")
     escritos.append(_salvar(fig, destino, "alpha_vs_gamma.png", rodape))
 
-    # 3. alfa contra T, que e a miopia (F12)
+    # 3. alpha contra T, que e a miopia (F12)
     Ts = np.array([1, T // 4, T // 2, 3 * T // 4, T])
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(Ts, np.full(Ts.shape, a_star), "o-", color="#2ca02c")
