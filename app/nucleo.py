@@ -1,32 +1,33 @@
-"""app.nucleo — funções puras com a matemática do modelo (Samuelson 1969).
+"""app.nucleo: as contas do modelo de Samuelson (1969).
 
-Sem estado: cada função implementa uma equação do artigo e é testável
-isoladamente (F6–F11). Metade "funcional pura" da separação de paradigmas (NF5).
+Aqui nao tem estado nenhum. Cada funcao e uma equacao do artigo e da pra
+testar sozinha (F6 a F11). E a parte "funcional" da separacao pedida no NF5.
 
-**Convenção — fatores brutos.** R e rf são *fatores* de retorno bruto
-(ex.: 1.02, 1.008), de modo que o retorno bruto do portfólio é
+Uma convencao importante: R e rf sao fatores de retorno BRUTO (1.02, 1.008),
+e nao a variacao. Assim o retorno bruto da carteira fica
 
-    R_p = rf + αᵀ(R − rf·1)            e o excesso é (R − rf·1).
+    R_p = rf + alfa * (R - rf)        e o excesso e (R - rf).
 
-O agente converte os retornos *líquidos* do mercado (r, rf_líq) em brutos
-(1+r, 1+rf_líq) e aplica a **responsabilidade limitada** (R ≥ 0) antes de
-chamar estas funções (ver ``app.agente``).
+Quem faz a conversao e o app.agente: ele pega os retornos liquidos do mercado,
+soma 1 e corta em zero (a acao nao pode valer menos que nada) antes de chamar
+estas funcoes.
 """
 
 import numpy as np
 from scipy import optimize
 
-# Piso numérico de R_p (rede de segurança) — evita R_p ≤ 0 nas potências.
+# piso de seguranca pro R_p, pra ele nunca ficar zero ou negativo na potencia
 _TOL_FALENCIA = 1e-12
 
-# Bracket inicial do brentq (N=1). |α*| real « 20 para dados mensais; se não
-# houver troca de sinal de G, o bracket é duplicado até _MAX_EXPANSOES vezes.
+# intervalo onde o brentq comeca procurando a raiz (caso de 1 ativo so).
+# Com dados mensais o alfa fica bem longe de 20, mas se G nao trocar de sinal
+# dentro do intervalo ele vai sendo dobrado ate 8 vezes.
 _BRACKET_INICIAL = 20.0
 _MAX_EXPANSOES = 8
 
 
 def funcao_foc(alpha, R, rf, gamma):
-    """G(α) = E[(R − rf·1) / R_p^γ], com R_p = rf + αᵀ(R − rf·1). Shape (N,). (F6)"""
+    """G(alpha) = E[(R − rf·1) / R_p^γ], com R_p = rf + αᵀ(R − rf·1). Shape (N,). (F6)"""
     alpha = np.asarray(alpha, dtype=float)
     excesso = R - rf                                    # (n, N)
     R_p = np.maximum(rf + excesso @ alpha, _TOL_FALENCIA)  # (n,)
@@ -35,7 +36,7 @@ def funcao_foc(alpha, R, rf, gamma):
 
 
 def _objetivo_J(alpha, R, rf, gamma):
-    """J(α) = E[u(R_p(α))] — maximizado pelo solver (dJ/dα = G)."""
+    """J(alfa) = E[u(R_p)]. E esta funcao que o solver maximiza; a derivada dela e o G."""
     excesso = R - rf
     R_p = np.maximum(rf + excesso @ alpha, _TOL_FALENCIA)
     if np.isclose(gamma, 1.0):
@@ -46,11 +47,11 @@ def _objetivo_J(alpha, R, rf, gamma):
 
 
 def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
-    """Resolve a FOC G(α*)=0 maximizando J(α). (F6)
+    """Acha o alfa que zera a condicao de primeira ordem, G(alfa)=0. (F6)
 
-    **Fiel ao artigo: α ∈ ℝ^N, SEM restrição alguma** — venda a descoberto
-    (α<0) e alavancagem (Σα>1) são sempre admitidas, e não há teto |α| ≤ α_max.
-    N ≥ 2 → SLSQP irrestrito; N = 1 → brentq com bracket auto-expansível.
+    Como no artigo, o alfa pode ser qualquer numero: pode ficar negativo
+    (venda a descoberto) e pode passar de 1 (alavancagem), sem limite.
+    Com 2 ativos ou mais usa o SLSQP; com 1 ativo so usa o brentq.
     """
     
     R = np.asarray(R, dtype=float)
@@ -66,7 +67,7 @@ def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
             options={"ftol": tol, "maxiter": int(maxiter), "disp": False})
         return res.x.copy()
 
-    # N == 1 — brentq. G decresce em α: procura-se G(lo) > 0 > G(hi).
+    # caso de 1 ativo, com brentq. O G so cai, entao procuro G(lo) > 0 > G(hi).
     g = lambda a: float(funcao_foc(np.array([a]), R, rf, gamma)[0])
     lo = -_BRACKET_INICIAL
     hi = _BRACKET_INICIAL
@@ -82,7 +83,7 @@ def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
 
 
 def phi_chapeu(alpha, R, rf, gamma):
-    """Φ̂ = E[R_p^(1−γ)] do portfólio ótimo (ou E[ln R_p] se γ=1). (F7)"""
+    """Phi_chapeu = E[R_p^(1−γ)] do portfólio ótimo (ou E[ln R_p] se γ=1). (F7)"""
     alpha = np.asarray(alpha, dtype=float)
     excesso = R - rf
     R_p = np.maximum(rf + excesso @ alpha, _TOL_FALENCIA)
@@ -92,10 +93,10 @@ def phi_chapeu(alpha, R, rf, gamma):
 
 
 def recorrencia_A(phi, beta, gamma, T):
-    """A_T=1; A_t=[1 + (β·A_{t+1}·Φ̂)^(1/γ)]^γ, t=T−1..0. Shape (T+1,). (F8)"""
+    """A_T=1; A_t=[1 + (beta·A_{t+1}·Phi_chapeu)^(1/γ)]^γ, t=T−1..0. Shape (T+1,). (F8)"""
     A = np.empty(T + 1)
     if np.isclose(gamma, 1.0):
-        # Limite log: A_t = (1−β^{T−t+1})/(1−β) — independe de Φ̂.
+        # caso gamma=1 (utilidade log): A_t = (1-beta^(T-t+1))/(1-beta), nao usa o phi
         for t in range(T + 1):
             A[t] = (T - t + 1) if np.isclose(beta, 1.0) else (1 - beta ** (T - t + 1)) / (1 - beta)
         return A
@@ -108,7 +109,7 @@ def recorrencia_A(phi, beta, gamma, T):
 
 
 def fracoes_consumo(A, gamma):
-    """θ_t = A_t^(−1/γ) (ou 1/A_t se γ=1). (F8)"""
+    """theta_t = A_t^(−1/γ) (ou 1/A_t se γ=1). (F8)"""
     A = np.asarray(A, dtype=float)
     if np.isclose(gamma, 1.0):
         return 1.0 / A
@@ -116,7 +117,7 @@ def fracoes_consumo(A, gamma):
 
 
 def funcao_valor(A, W, gamma):
-    """V_t(W) = A_t·W^(1−γ)/(1−γ) (γ≠1) ou A_t·ln(W) (γ=1). (F11)"""
+    """V_t(W) = A_t·W^(1−γ)/(1−γ) (γ diferente de 1) ou A_t·ln(W) (γ=1). (F11)"""
     A = np.asarray(A, dtype=float)
     if np.isclose(gamma, 1.0):
         return A * np.log(W)
@@ -124,20 +125,16 @@ def funcao_valor(A, W, gamma):
 
 
 def propagar_riqueza(w0, theta, alpha, R, rf):
-    """Forward pass (Etapas 5–6): consome c_t=θ_t·W_t, investe a poupança em α*
-    e propaga W_{t+1}=S_t·R_p. (F9, F10)
+    """Simula pra frente (Etapas 5 e 6). Em cada periodo consome theta*W,
+    investe o que sobrou no alfa otimo e calcula a riqueza do periodo seguinte,
+    W = poupanca * R_p. (F9, F10)
 
-    Parameters
-    ----------
-    w0 : riqueza inicial W₀.
-    theta : (T+1,) frações de consumo θ_t.
-    alpha : (N,) carteira ótima α*.
-    R : (n_paths, T, N) retornos brutos amostrados (um por período e caminho).
-    rf : fator livre de risco bruto.
+    Recebe: w0 (riqueza inicial), theta (as fracoes de consumo, T+1 valores),
+    alpha (a carteira otima), R (os retornos brutos sorteados, um por periodo
+    e por caminho) e rf (o fator livre de risco bruto).
 
-    Returns
-    -------
-    dict com ``W``, ``c``, ``S`` — cada um shape (n_paths, T+1).
+    Devolve um dicionario com W (riqueza), c (consumo) e S (poupanca), cada um
+    com uma linha por caminho e uma coluna por periodo.
     """
     R = np.asarray(R, dtype=float)
     alpha = np.asarray(alpha, dtype=float)
@@ -152,7 +149,7 @@ def propagar_riqueza(w0, theta, alpha, R, rf):
         S[:, t] = W[:, t] - c[:, t]
         R_p = rf + (R[:, t, :] - rf) @ alpha           # (n_paths,)
         W[:, t + 1] = S[:, t] * R_p
-    # Condição terminal: consome toda a riqueza (θ_T = 1).
+    # Condição terminal: consome toda a riqueza (theta_T = 1).
     c[:, T] = theta[T] * W[:, T]
     S[:, T] = W[:, T] - c[:, T]
     return {"W": W, "c": c, "S": S}
