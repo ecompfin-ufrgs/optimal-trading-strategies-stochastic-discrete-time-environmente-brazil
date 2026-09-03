@@ -1,12 +1,11 @@
-"""app.principal — orquestrador da esteira pipes-and-filters.
+"""app.principal: liga as etapas na ordem (F10, NF5).
 
-Liga os filtros na ordem da esteira (F10, NF5):
+    dal -> mercado -> agente (+ nucleo) -> simulacao -> resultado
 
-    dal → mercado → agente (+ nucleo) → simulação → resultado
-
-`executar_pipeline` é o **único ponto** que a camada web chama: ela passa um
-`config` e recebe o resultado pronto (carteira ótima, consumo, trajetórias).
-Toda a lógica vive nos módulos; aqui só há orquestração.
+O executar_pipeline e a unica funcao que a camada web chama: ela manda um
+dicionario de configuracao e recebe o resultado pronto, com a carteira otima,
+o consumo e as trajetorias. A logica toda esta nos outros modulos; aqui so tem
+a sequencia.
 """
 
 import numpy as np
@@ -16,7 +15,10 @@ from app.agente import Investidor
 from app.mercado import RendaFixa, RendaVariavel
 
 # Fator de desconto **anual** padrão.
-
+# Fica declarado ao ano de proposito: falar "beta = 0.96" sozinho nao diz a que
+# periodo se refere, e se alguem entender isso como valor por pregao vira
+# 0.96 elevado a 252, ou seja quase zero, e o investidor consumiria quase tudo
+# no primeiro ano.
 BETA_ANUAL_PADRAO = 0.96
 
 
@@ -28,57 +30,59 @@ def _n_scenarios_padrao(periodos_por_ano: int) -> int:
 
 
 def executar_pipeline(config: dict) -> dict:
-    """Executa a esteira de ponta a ponta e devolve os resultados. (NF5)
+    """Roda a esteira inteira e devolve os resultados. (NF5)
 
-    Chaves de ``config``:
-      Frequência — **obrigatória**, sem default (ver nota):
-        ``periodos_por_ano`` : 12 (mensal) ou 252 (diário).
-      Dados (uma das duas):
-        ``retornos`` : DataFrame com ``data`` + colunas de ativos; OU
-        ``db_path`` (+ ``tabela``, default ``'retornos'``) : lê do SQLite.
-      Mercado:
-        ``ativos`` : colunas de risco (default: todas menos ``data`` e ``rf_col``);
-        ``rf_col`` : coluna da taxa livre de risco nos dados (default ``'cdi'``);
-        ``cdi_anual`` : CDI **anual**, convertido para o período por ``RendaFixa``
-        com ``periodos_por_ano``. Se ausente, usa a média de ``rf_col``, que o
-        ``dal`` já grava por período.
-      Agente: ``gamma`` (5.0), ``w0`` (1.0);
-        ``horizonte`` : T em **períodos** — obrigatório, sem default (ver nota);
-        desconto: ``beta_anual`` (0.96, convertido para o período) **ou**
-        ``beta`` (já por período) — passar os dois é erro.
-      Simulação: ``n_scenarios`` (200k mensal / 4M diário), ``n_paths`` (5000),
-        ``seed`` (42).
+    O que pode vir no config:
 
-    Os retornos são sempre Normais e a carteira α* é sempre irrestrita (short e
-    alavancagem permitidos, sem teto).
+    periodos_por_ano: 12 se a base for mensal, 252 se for diaria. E
+        obrigatorio, nao tem valor padrao, pelo motivo explicado abaixo.
+    retornos ou db_path: ou o DataFrame ja pronto, com a coluna data mais uma
+        coluna por ativo, ou o caminho do banco pra ler do SQLite (nesse caso
+        da pra passar tambem tabela, que por padrao e 'retornos').
+    ativos: quais colunas sao de risco. Por padrao, todas menos data e a
+        coluna do rf.
+    rf_col: nome da coluna da taxa livre de risco nos dados, por padrao 'cdi'.
+    cdi_anual: o CDI ao ano, convertido pro periodo aqui dentro. Se nao vier,
+        usa a media da coluna do rf, que o dal ja grava por periodo.
+    gamma (5.0), w0 (1.0) e horizonte, que e o T em periodos e tambem e
+        obrigatorio.
+    beta_anual (0.96, convertido pro periodo) ou beta, se voce ja tiver o valor
+        por periodo. Passar os dois da erro.
+    n_scenarios (200 mil no mensal, 4 milhoes no diario), n_paths (5000) e
+        seed (42).
 
-    Returns
-    -------
-    dict com ``alpha_star`` (carteira ótima), ``theta``/``consumo_inicial``,
-    ``phi_hat``, ``A_t`` (Etapa 3) e ``valor_V`` (Etapa 7 — V_t na riqueza
-    inicial, F11), calibração (``mu_hat``, ``sigma_hat``, ``rf``) e o resumo da
-    simulação: ``E_W_T``, percentis de W_T e as trajetórias
-    ``trajetoria_W_media``/``_mediana``/``_p5``/``_p95`` e ``trajetoria_c_media``.
-    Devolve também a unidade de tempo efetivamente usada — ``periodos_por_ano``
-    e ``beta`` (já por período) — para que quem exibe os números não precise
-    refazer a conversão.
+    Os retornos sao sempre normais e a carteira e sempre livre, podendo ficar
+    negativa ou passar de 1, como no artigo (secao 3.1).
+
+    Por que o periodos_por_ano nao tem padrao: a media, a covariancia e o rf
+    lido da tabela ja saem na frequencia dos dados, mas o cdi_anual e o
+    beta_anual sao declarados ao ano, e o numero de cenarios tambem depende da
+    frequencia. Nenhum dos tres consegue adivinhar sozinho.
+
+    O que volta: um dicionario com alpha_star (a carteira otima), theta e
+    consumo_inicial, phi_hat, A_t (Etapa 3) e valor_V (Etapa 7, a funcao valor
+    na riqueza inicial, que e o F11), a calibracao (mu_hat, sigma_hat e rf) e o
+    resumo da simulacao, com E_W_T, os percentis de W_T e as trajetorias
+    trajetoria_W_media, _mediana, _p5, _p95 e trajetoria_c_media. Vem tambem o
+    periodos_por_ano e o beta ja convertido, pra quem for exibir os numeros nao
+    ter que refazer a conta.
     """
     cfg = dict(config)
     coluna_data = cfg.get("coluna_data", "data")
     rf_col = cfg.get("rf_col", "cdi")
 
-    # ── 0. Frequência — a unidade de tempo de todo o resto ──────────────────
+    # 0. a frequencia, que da a unidade de tempo de todo o resto
     if "periodos_por_ano" not in cfg:
         raise ValueError(
-            "config precisa de 'periodos_por_ano' (12 mensal, 252 diário). "
-            "Não há default: é ele que dá unidade de tempo a 'cdi_anual', "
-            "'beta_anual' e ao default de 'n_scenarios'."
+            "falta 'periodos_por_ano' no config (12 se mensal, 252 se diario). "
+            "Sem ele nao da pra converter 'cdi_anual' e 'beta_anual', que sao "
+            "declarados ao ano."
         )
     ppa = int(cfg["periodos_por_ano"])
     if ppa <= 0:
         raise ValueError(f"'periodos_por_ano' deve ser positivo; veio {ppa!r}.")
 
-    # ── 1. DAL — obter retornos ─────────────────────────────────────────────
+    # 1. dal: pegar os retornos
     if cfg.get("retornos") is not None:
         retornos = cfg["retornos"]
     elif "db_path" in cfg:
@@ -91,7 +95,7 @@ def executar_pipeline(config: dict) -> dict:
     if not ativos:
         raise ValueError("nenhum ativo de risco identificado em 'retornos'.")
 
-    # ── 2. Mercado — calibração (Etapa 0) ───────────────────────────────────
+    # 2. mercado: a calibracao (Etapa 0)
     if "cdi_anual" in cfg:
         rf = RendaFixa(cfg["cdi_anual"], ppa).retorno_livre_risco()
     elif rf_col in retornos.columns:
@@ -100,12 +104,11 @@ def executar_pipeline(config: dict) -> dict:
         rf = float(cfg.get("rf", 0.0))
     mercado = RendaVariavel(retornos[[coluna_data] + ativos], coluna_data=coluna_data)
 
-    # ── 3. Agente — política ótima (Etapas 1–4) ─────────────────────────────
+    # 3. agente: a politica otima (Etapas 1 a 4)
     if "horizonte" not in cfg:
         raise ValueError(
-            "config precisa de 'horizonte' (T, em períodos). Não há default: "
-            "o número de períodos depende da frequência dos dados — 60 é 5 anos "
-            "no mensal e ~3 meses no diário."
+            "falta 'horizonte' no config (o T, contado em periodos). Nao tem "
+            "padrao porque 60 periodos e 5 anos no mensal e uns 3 meses no diario."
         )
     if "beta" in cfg and "beta_anual" in cfg:
         raise ValueError("use 'beta' (por período) OU 'beta_anual', não os dois.")
@@ -118,14 +121,14 @@ def executar_pipeline(config: dict) -> dict:
     alpha = inv.carteira_otima(mercado, rf, n_scenarios=n_scenarios, seed=seed)
     theta = inv.fracoes_consumo()
 
-    # ── 4. Simulação forward (Etapas 5–6) ───────────────────────────────────
+    # 4. simulacao pra frente (Etapas 5 e 6)
     T, N = inv.horizonte, len(ativos)
     n_paths = cfg.get("n_paths", 5_000)
     r_paths = mercado.amostrar(n_paths * T, seed=seed + 1)
     R_paths = np.maximum(1.0 + r_paths.reshape(n_paths, T, N), 0.0)
     sim = nucleo.propagar_riqueza(inv.w0, theta, alpha, R_paths, 1.0 + rf)
 
-    # ── 5. Resultado ────────────────────────────────────────────────────────
+    # 5. o resultado
     W_T = sim["W"][:, -1]
     A_t = inv.coeficientes_A
     valor_V = nucleo.funcao_valor(A_t, inv.w0, inv.gamma)
