@@ -1,13 +1,15 @@
-"""app.agente — o indivíduo/investidor CRRA.
+"""app.agente: o investidor.
 
-POO: encapsula as primitivas do agente (γ, β, W₀, T) e orquestra a sua
-decisão, delegando a matemática a ``app.nucleo`` (F5, F6, F8, F9).
+Esta e a parte orientada a objetos. A classe guarda as caracteristicas do
+investidor (aversao ao risco, impaciencia, riqueza inicial e horizonte) e
+conduz a decisao dele, deixando as contas por conta do app.nucleo
+(F5, F6, F8, F9).
 
-Fluxo da decisão:
-  1. amostra cenários de retorno do mercado (líquidos);
-  2. converte para fatores brutos e aplica responsabilidade limitada (R ≥ 0);
-  3. resolve a FOC G(α*)=0 (carteira ótima) e guarda α* e Φ̂;
-  4. da recorrência A_t deriva as frações de consumo θ_t.
+A decisao acontece nesta ordem:
+  1. sorteia cenarios de retorno do mercado (liquidos);
+  2. converte pra fator bruto e corta em zero;
+  3. acha a carteira otima e guarda o alfa e o phi;
+  4. usa a recorrencia A_t pra chegar nas fracoes de consumo.
 """
 
 import numpy as np
@@ -36,7 +38,7 @@ class Investidor:
         self._phi_hat: float | None = None
         self._A: np.ndarray | None = None
 
-    # ── Utilidade CRRA (F5) ─────────────────────────────────────────────────
+    # utilidade CRRA (F5)
     def utilidade(self, c):
         """u(c) = c^(1−γ)/(1−γ) (ou ln c se γ=1). (F5)"""
         c = np.asarray(c, dtype=float)
@@ -48,17 +50,17 @@ class Investidor:
         """u'(c) = c^(−γ). (F5)"""
         return np.asarray(c, dtype=float) ** (-self.gamma)
 
-    # ── Decisão de portfólio e consumo (F6, F8, F9) ─────────────────────────
+    # decisao de carteira e de consumo (F6, F8, F9)
     def carteira_otima(self, mercado: RendaVariavel, rf: float, *,
                        n_scenarios: int = 100_000, seed: int | None = 42,
                        **opts) -> np.ndarray:
-        """Carteira ótima α* via FOC G(α*)=0. (F6)
+        """Carteira otima, resolvendo G(alpha)=0. (F6)
 
-        Amostra cenários (líquidos) do mercado e converte para fatores brutos.
-        **α é sempre irrestrito** (short e alavancagem permitidos, sem teto).
+        Sorteia os cenarios do mercado (que vem liquidos) e converte pra fator
+        bruto. O alpha e sempre livre, pode ser negativo e pode passar de 1.
 
-        ``opts`` é repassado a ``nucleo.resolver_alpha_otimo`` (``tol``,
-        ``maxiter``, ``alpha0``).
+        O que vier em opts vai direto pro nucleo.resolver_alpha_otimo
+        (tol, maxiter, alpha0).
         """
         r = mercado.amostrar(n_scenarios, seed=seed)
         rf_bruto = 1.0 + rf
@@ -69,33 +71,33 @@ class Investidor:
         return alpha
 
     def fracoes_consumo(self) -> np.ndarray:
-        """Frações de consumo θ_t = A_t^(−1/γ), t=0..T. (F8, F9)
+        """Frações de consumo theta_t = A_t^(−1/γ), t=0..T. (F8, F9)
 
-        Requer ``carteira_otima(...)`` chamado antes (usa o Φ̂ guardado).
+        Requer carteira_otima(...) chamado antes (usa o Phi_chapeu guardado).
         """
         if self._phi_hat is None:
             raise RuntimeError(
-                "chame carteira_otima(...) antes de fracoes_consumo() — "
-                "θ_t depende de Φ̂, que vem da política ótima."
+                "chame carteira_otima() antes de fracoes_consumo(): "
+                "as fracoes de consumo dependem do phi, que sai da carteira.
             )
         self._A = nucleo.recorrencia_A(self._phi_hat, self.beta, self.gamma, self.horizonte)
         return nucleo.fracoes_consumo(self._A, self.gamma)
 
     @property
     def alpha_star(self) -> np.ndarray | None:
-        """Última carteira ótima α* calculada (ou None)."""
+        """Última carteira ótima alpha* calculada (ou None)."""
         return self._alpha_star
 
     @property
     def phi_hat(self) -> float | None:
-        """Φ̂ da última política ótima (ou None)."""
+        """Phi_chapeu da última política ótima (ou None)."""
         return self._phi_hat
 
     @property
     def coeficientes_A(self) -> np.ndarray | None:
-        """Coeficientes A_t da última recorrência (Etapa 3), ou None.
+        """Os coeficientes A_t da ultima recorrencia (Etapa 3), ou None.
 
-        Guardados porque a função valor V_t = A_t·W^(1−γ)/(1−γ) (F11) depende
-        deles e, sem isso, seriam recalculados fora da esteira.
+        Ficam guardados porque a funcao valor (F11) precisa deles, e sem isso
+        eles teriam que ser calculados de novo la na frente.
         """
         return self._A
