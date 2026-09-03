@@ -1,9 +1,9 @@
-"""app.ingestao — monta o banco de dados REAL (Ibovespa + CDI).
+"""app.ingestao: monta o banco com os dados reais de Ibovespa e CDI.
 
-Passo de ingestão da esteira (F1, NF6): baixa as séries de mercado, calcula os
-retornos alinhados e grava as três tabelas do `projeto.md` num SQLite:
+E o passo de ingestao da esteira (F1, NF6). Baixa as duas series, calcula os
+retornos alinhados por data e grava as tres tabelas do projeto num SQLite:
 
-    ibovespa(data, fechamento) · cdi(data, cdi) · retornos(data, ibov, cdi)
+    ibovespa(data, fechamento), cdi(data, cdi) e retornos(data, ibov, cdi)
 
 Uso (linha de comando):
 
@@ -12,11 +12,11 @@ Uso (linha de comando):
     python -m app.ingestao 2010-01-01 2020-12-31
     python -m app.ingestao 2022-05-22 --diario  # série diária
 
-No mensal a coluna ``data`` é ``AAAA-MM``; no diário, ``AAAA-MM-DD``. Cada
-frequência tem seu banco (``data/mercado.db`` e ``data/mercado_diario.db``),
+No mensal a coluna data é AAAA-MM; no diário, AAAA-MM-DD. Cada
+frequência tem seu banco (data/mercado.db e data/mercado_diario.db),
 para que uma ingestão não sobrescreva a outra.
 
-Depois, ``python -m app`` usa o banco mensal automaticamente.
+Depois, python -m app usa o banco mensal automaticamente.
 """
 
 import os
@@ -29,37 +29,34 @@ BANCO_PADRAO = {"1mo": "data/mercado.db", "1d": "data/mercado_diario.db"}
 
 def montar_base(db_path: str | None = None, inicio: str = "2000-01-01",
                 fim: str | None = None, frequencia: str = "1mo") -> dict:
-    """Baixa Ibovespa (Yahoo) + CDI (Banco Central) e grava o SQLite.
+    """
+    Baixa o Ibovespa no Yahoo e o CDI no Banco Central e grava no SQLite.
 
-    Parameters
-    ----------
-    db_path : caminho do banco (``None`` => o padrão da frequência).
-    frequencia : ``"1mo"`` (mensal) ou ``"1d"`` (diário).
+    O db_path e o caminho do banco; se vier None, usa o padrao da frequencia.
+    A frequencia e "1mo" pra mensal ou "1d" pra diario.
 
-    Returns
-    -------
-    dict com ``db_path``, ``frequencia``, ``n_periodos`` e ``periodo``
-    (primeira e última data).
+    Devolve um dicionario com db_path, frequencia, n_periodos e periodo, que
+    traz a primeira e a ultima data.
     """
     if db_path is None:
         db_path = BANCO_PADRAO[frequencia]
     os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
 
-    # 1. Ibovespa — níveis (tabela 'ibovespa').
+    # 1. o Ibovespa, que sao os niveis do indice (tabela 'ibovespa')
     precos = dal.baixar_precos(["^BVSP"], inicio, fim, frequencia=frequencia)
     precos = precos.rename(columns={precos.columns[1]: "fechamento"})
     dal.gravar_sqlite(precos, db_path, "ibovespa")
 
-    # 2. CDI — taxa por período (tabela 'cdi').
+    # 2. o CDI, que ja e uma taxa por periodo (tabela 'cdi')
     cdi = dal.baixar_cdi_bcb(inicio, fim, frequencia=frequencia)
     dal.gravar_sqlite(cdi, db_path, "cdi")
 
-    # 3. Retornos alinhados por data (tabela 'retornos'). O merge interno
-    #    descarta feriado de bolsa que não é feriado bancário, e vice-versa.
+    # 3. os retornos alinhados por data (tabela 'retornos'). O merge interno
+    # joga fora feriado de bolsa que nao e feriado de banco, e o contrario
     ret_ibov = dal.calcular_retornos(precos.rename(columns={"fechamento": "ibov"}))
     retornos = ret_ibov.merge(cdi, on="data", how="inner")
     if retornos.empty:
-        raise ValueError("Sem datas em comum entre Ibovespa e CDI — verifique o período.")
+        raise ValueError("Nao tem nenhuma data em comum entre Ibovespa e CDI. Confira o periodo.")
     dal.gravar_sqlite(retornos, db_path, "retornos")
 
     return {"db_path": db_path, "frequencia": frequencia, "n_periodos": len(retornos),
@@ -78,7 +75,7 @@ def main() -> None:
           f"de {inicio} ate {fim or 'hoje'} ({unidade})...")
     try:
         info = montar_base(inicio=inicio, fim=fim, frequencia=frequencia)
-    except Exception as exc:  # noqa: BLE001 — mensagem amigável p/ o usuário
+    except Exception as exc:  # pega qualquer erro pra mostrar uma mensagem legivel
         print(f"\nERRO ao baixar os dados: {type(exc).__name__}: {exc}")
         raise SystemExit(1)
     print(f"OK! Banco criado em: {info['db_path']}")
