@@ -1,11 +1,10 @@
-"""app.mercado — mercados de renda fixa (CDI) e variável (Ibovespa).
+"""app.mercado: a renda fixa (CDI) e a renda variavel (Ibovespa).
 
-POO: classes que encapsulam o estado/dados de cada mercado (F2, F3, F4).
-Implementa a **Etapa 0 (calibração)** do artigo: a partir dos retornos
-históricos, fornece os insumos exógenos do modelo — R_f (renda fixa) e
-(μ̂, Σ̂) + amostragem Monte Carlo (renda variável).
+Cada classe guarda os dados de um mercado (F2, F3, F4). E aqui que acontece a
+Etapa 0 do artigo, a calibracao: a partir dos retornos historicos saem a taxa
+livre de risco, a media, a matriz de covariancia e o sorteio dos cenarios.
 
-A matemática de otimização (α*, A_t, …) fica em ``app.nucleo``.
+A parte de otimizacao (o alpha, o A_t) fica no app.nucleo.
 """
 
 import numpy as np
@@ -17,41 +16,37 @@ class RendaFixa:
 
     def __init__(self, cdi_anual: float, periodos_por_ano: int = 12) -> None:
         """
-        Parameters
-        ----------
-        cdi_anual : taxa CDI anual em decimal (ex.: 0.10 para 10% a.a.).
-        periodos_por_ano : 12 para dados mensais (default).
+        Recebe o CDI anual em decimal (0.10 para 10% ao ano) e em quantos
+        periodos o ano e dividido: 12 se a base for mensal, 252 se for diaria.
         """
         self.cdi_anual = float(cdi_anual)
         self.periodos_por_ano = int(periodos_por_ano)
 
     def retorno_livre_risco(self) -> float:
-        """Taxa livre de risco R_f por período (líquida). (F3)
+        """A taxa livre de risco de um periodo, liquida. (F3)
 
-        Conversão **composta** anual → período:
+        A conversao de ano pra periodo e composta, e nao dividindo por 12:
 
-            R_f = (1 + cdi_anual)^(1/periodos_por_ano) − 1
+            R_f = (1 + cdi_anual) ** (1 / periodos_por_ano) - 1
 
-        Ex.: 10% a.a. mensal ⇒ (1.10)^(1/12) − 1 ≈ 0.007974. O fator *bruto*
-        usado ao propagar a riqueza é ``1 + R_f``.
+        Por exemplo, 10% ao ano no mensal da (1.10) ** (1/12) - 1, que e mais
+        ou menos 0.007974. Na hora de propagar a riqueza usa-se 1 + R_f.
         """
         return (1.0 + self.cdi_anual) ** (1.0 / self.periodos_por_ano) - 1.0
 
 
 class RendaVariavel:
-    """Mercado de renda variável (Ibovespa) — distribuição dos retornos. (F4)
+    """Mercado de renda variavel (Ibovespa): a distribuicao dos retornos. (F4)
 
-    Opera no **espaço de retornos líquidos** (a mesma forma da tabela
-    ``retornos``); o excesso ``R − R_f`` é formado depois, no agente/núcleo.
+    Trabalha com retornos liquidos, do mesmo jeito que estao na tabela
+    retornos do banco. A diferenca R - R_f e montada depois, no agente.
     """
 
     def __init__(self, retornos: pd.DataFrame, coluna_data: str = "data") -> None:
         """
-        Parameters
-        ----------
-        retornos : DataFrame com (opcionalmente) a coluna ``data`` + uma coluna
-            de retorno por ativo (decimal, sem NaN).
-        coluna_data : nome da coluna de data a ignorar nos cálculos.
+        Recebe o DataFrame de retornos, com uma coluna por ativo em decimal
+        e sem valor faltando. A coluna de data e opcional; se existir, o nome
+        dela vem em coluna_data e ela fica de fora das contas.
         """
         df = retornos.drop(columns=[coluna_data]) if coluna_data in retornos.columns else retornos.copy()
         self.ativos: list[str] = list(df.columns)
@@ -69,26 +64,24 @@ class RendaVariavel:
         return self._R.shape[1]
 
     def media(self) -> np.ndarray:
-        """Vetor de retornos esperados estimado μ̂, shape (N,). (F2, F4)"""
+        """Vetor de retornos esperados estimado mu_chapeu, shape (N,). (F2, F4)"""
         return self._R.mean(axis=0)
 
     def covariancia(self) -> np.ndarray:
-        """Matriz de covariância amostral não-viesada Σ̂, shape (N, N). (F2, F4)
+        """A matriz de covariancia amostral, com ddof=1. (F2, F4)
 
-        ``np.cov(R.T, ddof=1)`` + ``atleast_2d`` (idêntico ao estimador de
-        referência ``estimate_sample_cov``).
+        E o np.cov mesmo, com atleast_2d por cima pra garantir que o resultado
+        seja bidimensional quando tem um ativo so.
         """
         return np.atleast_2d(np.cov(self._R.T, ddof=1))
 
     def amostrar(self, n: int, seed: int | None = None) -> np.ndarray:
-        """Gera ``n`` cenários de retorno R ~ Normal(μ̂, Σ̂), shape (n, N).
+        """
+        Sorteia n cenarios de retorno de uma normal com a media e a
+        covariancia estimadas.
 
-        Usado pelo Monte Carlo da FOC (Etapa 1). Reprodutível via ``seed`` (NF4).
-
-        Parameters
-        ----------
-        n : número de cenários.
-        seed : semente do gerador (reprodutibilidade).
+        E o que alimenta o Monte Carlo da Etapa 1. Passando a mesma semente sai
+        sempre o mesmo resultado, que e o que o NF4 pede.
         """
         rng = np.random.default_rng(seed)
         mu = self.media()
