@@ -1,14 +1,14 @@
 """app.graficos — figuras dos resultados do modelo (F16).
 
-Gera em ``results/`` as ilustrações usadas no documento. Este módulo fica fora
+Gera em results/ as ilustrações usadas no documento. Este módulo fica fora
 da esteira: `app.principal` não importa ele, então quem só quer o resultado
 numérico não paga o custo de carregar o matplotlib.
 
-Cada figura leva no rodapé a **procedência** — base, janela dos dados,
-parâmetros e o α* da rodada. Assim uma figura solta continua auditável: não há
+Cada figura leva no rodapé a procedência (base, janela dos dados,
+parâmetros e o alpha* da rodada). Assim uma figura solta continua auditável: não há
 arquivo de metadados paralelo que possa ficar para trás.
 
-Uso: ``python -m app --graficos`` (os parâmetros são os da própria execução).
+Uso: python -m app --graficos (os parâmetros são os da própria execução).
 """
 
 import os
