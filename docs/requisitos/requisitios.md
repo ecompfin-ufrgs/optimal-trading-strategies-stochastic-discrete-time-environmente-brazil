@@ -18,15 +18,14 @@ isto é, grandezas que você quer quer o software calcule.-->
 - Requisito F12 - validar a miopia: α* invariante ao horizonte
 - Requisito F13 - validar θ_t estritamente crescente até θ_T = 1
 - Requisito F14 - validar a convergência ao Merton contínuo quando Δt→0
-- Requisito F15 - a interface web deve receber os parâmetros do investidor (γ, β, W₀, T, ativos) e disparar o cálculo
-- Requisito F16 - a interface web deve exibir os resultados — carteira ótima α*, trajetória de consumo/riqueza e gráficos
+- Requisito F15 - receber os parâmetros do investidor (γ, β, W₀, T, ativos) pela linha de comando e disparar o cálculo
+- Requisito F16 - apresentar os resultados: carteira ótima α*, trajetória de consumo/riqueza e as figuras
 
 ## Requisitos não funcionais
 
-- Requisito NF1 - O tempo de execução de cada algoritmo não pode superar 60 segundos.
-- Requisito NF2 - a aplicação deve ser executada na Web (acesso via navegador)
-- Requisito NF3 - a aplicação também deve poder ser executada em Windows (o servidor deve subir nos três)
+- Requisito NF1 - O tempo de execução de cada algoritmo não pode superar 30 segundos.
+- Requisito NF2 - a aplicação deve ser executada pela linha de comando, sem precisar editar código para trocar os parâmetros
+- Requisito NF3 - rodar em Windows, Linux e macOS (o desenvolvimento é feito no Windows e a suíte de testes roda em Linux, no GitHub Actions, a cada push)
 - Requisito NF4 - reprodutibilidade: mesma seed + mesmos dados → resultado idêntico
-- Requisito NF5 - arquitetura pipes-and-filter + separação POO (estado) / funcional puro (matemática), com a camada web sobre o módulo principal
+- Requisito NF5 - arquitetura pipes-and-filter + separação POO (estado) / funcional puro (matemática)
 - Requisito NF6 - persistência dos dados em SQLite via DAL
-
