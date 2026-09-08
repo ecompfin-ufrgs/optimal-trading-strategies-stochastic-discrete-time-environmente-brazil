@@ -51,8 +51,7 @@ def montar_base(db_path: str | None = None, inicio: str = "2000-01-01",
     cdi = dal.baixar_cdi_bcb(inicio, fim, frequencia=frequencia)
     dal.gravar_sqlite(cdi, db_path, "cdi")
 
-    # 3. os retornos alinhados por data (tabela 'retornos'). O merge interno
-    # joga fora feriado de bolsa que nao e feriado de banco, e o contrario
+    # 3. os retornos alinhados por data (tabela 'retornos').
     ret_ibov = dal.calcular_retornos(precos.rename(columns={"fechamento": "ibov"}))
     retornos = ret_ibov.merge(cdi, on="data", how="inner")
     if retornos.empty:
@@ -75,7 +74,7 @@ def main() -> None:
           f"de {inicio} ate {fim or 'hoje'} ({unidade})...")
     try:
         info = montar_base(inicio=inicio, fim=fim, frequencia=frequencia)
-    except Exception as exc:  # pega qualquer erro pra mostrar uma mensagem legivel
+    except Exception as exc: 
         print(f"\nERRO ao baixar os dados: {type(exc).__name__}: {exc}")
         raise SystemExit(1)
     print(f"OK! Banco criado em: {info['db_path']}")
