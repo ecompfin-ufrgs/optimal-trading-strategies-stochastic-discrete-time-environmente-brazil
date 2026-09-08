@@ -1,11 +1,13 @@
-"""app.principal: liga as etapas na ordem (F10, NF5).
+"""app.principal — orquestrador da esteira pipes-and-filters.
 
-    dal -> mercado -> agente (+ nucleo) -> simulacao -> resultado
+Liga os filtros na ordem da esteira (F10, NF5):
 
-O executar_pipeline e a unica funcao que a camada web chama: ela manda um
-dicionario de configuracao e recebe o resultado pronto, com a carteira otima,
-o consumo e as trajetorias. A logica toda esta nos outros modulos; aqui so tem
-a sequencia.
+    dal → mercado → agente (+ nucleo) → simulação → resultado
+
+executar_pipeline é o único ponto de entrada da esteira: recebe um config e
+devolve o resultado pronto (carteira ótima, consumo, trajetórias). Foi feito
+assim para que outra interface possa ser ligada depois sem mexer no núcleo.
+Toda a lógica vive nos módulos; aqui só há orquestração.
 """
 
 import numpy as np
