@@ -95,7 +95,7 @@ data,ibov,cdi
 
 ### Dados em trânsito (pipes)
 
-Entre uma etapa e outra os dados ficam só na memória. As séries de preços e de retornos andam como `pandas.DataFrame` e o resto (as médias, a matriz de covariância, os cenários e as trajetórias de riqueza e consumo) como `numpy.ndarray`. Só as pontas da esteira encostam no disco: a DAL de um lado e o relatório ou a web do outro.
+Entre uma etapa e outra os dados ficam só na memória. As séries de preços e de retornos andam como `pandas.DataFrame` e o resto (as médias, a matriz de covariância, os cenários e as trajetórias de riqueza e consumo) como `numpy.ndarray`. Só as pontas da esteira encostam no disco: a DAL de um lado e as figuras dos resultados do outro.
 
 ---
 
@@ -105,7 +105,7 @@ Entre uma etapa e outra os dados ficam só na memória. As séries de preços e 
 
 A aplicação segue o modelo arquitetural conhecido como pipes and filters. A ideia é que os dados passem por uma esteira de etapas de processamento, que são os filtros, ligadas pelos dados que saem de uma etapa e entram na próxima, que são os pipes. Cada filtro tem uma responsabilidade só: recebe dados, transforma e repassa adiante.
 
-A camada de apresentação, que é a interface web, usa um padrão diferente, o MVC (Model-View-Controller). Enquanto o núcleo de cálculo é pipes and filters, a apresentação separa três papéis. O Model é o pacote `app`, acessado pela função `app.principal.executar_pipeline`, e é onde ficam os dados e a lógica de negócio. O Controller recebe os parâmetros que o usuário digitou, monta o `config` e chama o Model. A View mostra os resultados: a carteira ótima, as trajetórias e os gráficos. Dessa forma o núcleo fica isolado da interface.
+A interface da aplicação é a linha de comando, no `app.__main__`. Ela não faz conta nenhuma: lê os parâmetros que o usuário passou, monta o `config`, chama uma única função do núcleo e imprime o que voltou. Essa função é a `app.principal.executar_pipeline`, que foi feita de propósito como ponto de entrada único, recebendo um dicionário e devolvendo outro. A vantagem de concentrar tudo nela é que o núcleo de cálculo não sabe quem está chamando, então dá para ligar outra interface depois sem mexer em nada do que está aqui dentro.
 
 O requisito NF5 pede também a separação de paradigmas, que ficou assim:
 
@@ -123,8 +123,7 @@ O requisito NF5 pede também a separação de paradigmas, que ficou assim:
 | `app.nucleo` | as funções puras com a matemática do modelo | F6–F11 |
 | `app.principal` | o orquestrador, que liga as etapas na ordem | F10, NF5 |
 | `app.graficos` | as figuras dos resultados em `results/`, fora da esteira | F16 |
-| `app.__main__` | o ponto de entrada `python -m app`, que roda a base diária usando o banco real se ele existir | NF5 |
-| `web` (à parte) | a interface web em cima do módulo principal | F15, F16, NF2 |
+| `app.__main__` | o ponto de entrada `python -m app`, que recebe os parâmetros e roda a base diária usando o banco real se ele existir | F15, NF5 |
 
 ### Figura: esteira do pipeline
 
@@ -161,11 +160,6 @@ O requisito NF5 pede também a separação de paradigmas, que ficou assim:
       v
 +-----------------------------+
 | Relatorio (tabelas/graficos)|   (F16)
-+-----------------------------+
-      |  resultados
-      v
-+-----------------------------+
-| Interface Web (a parte)     |   (F15, F16, NF2)
 +-----------------------------+
 ```
 
@@ -299,11 +293,11 @@ Uma observação sobre o domínio dos pesos. A função `resolver_alpha_otimo` �
 
 ### `app.principal`: Orquestrador (F10, NF5)
 
-Liga os filtros na ordem da esteira. É a função que a web chama.
+Liga os filtros na ordem da esteira. É a função que o `python -m app` chama.
 
 ```python
 def executar_pipeline(config: dict) -> dict:
-    """DAL → mercado → agente → simulação; devolve o resultado (alpha*, theta_t, trajetórias, métricas) que a web consome. (NF5)"""
+    """DAL → mercado → agente → simulação; devolve o resultado (alpha*, theta_t, trajetórias, métricas). (NF5)"""
 ```
 
 O número de cenários (`n_scenarios`) precisa de atenção, porque depende da frequência dos dados. O padrão de 80 000 serve bem para séries mensais. Quem chama a função precisa escolher o `n_scenarios` de acordo com a base. O `app.__main__` usa 4 milhões no diário e 200 mil no mensal.
@@ -320,21 +314,11 @@ def gerar(res, mercado, rf, cfg, rodape, periodos_por_ano,
 
 O módulo é acionado por `python -m app --graficos`, na mesma execução que faz as contas, então os parâmetros das figuras são os mesmos da linha de comando e não há como um divergir do outro.
 
-O matplotlib fica isolado de propósito. O `app.principal` não importa este módulo, e no `__main__` o import só acontece se a flag for usada. Sem a flag o matplotlib nem chega a ser carregado. Isso importa para a camada web, que consome só o `executar_pipeline` e desenha no navegador a partir do JSON.
+O matplotlib fica isolado de propósito. O `app.principal` não importa este módulo, e no `__main__` o import só acontece se a flag for usada. Sem a flag o matplotlib nem chega a ser carregado. Assim quem só quer o resultado numérico não paga o tempo de inicialização de uma biblioteca de gráficos inteira, e o núcleo de cálculo continua sem depender dela.
 
 Cada PNG leva no rodapé as informações da rodada que o gerou: a base, a janela dos dados, gamma, beta anual, T, o `n_scenarios`, a semente e o alfa ótimo. A alternativa seria guardar isso num arquivo de metadados separado, mas aí seria fácil o arquivo ficar para trás; do jeito que está, a legenda acompanha a imagem quando ela vai para dentro do documento. As figuras ficam versionadas no repositório, porque o texto se refere a elas.
 
 Dois desses gráficos refazem a otimização e por isso custam tempo: o G(alpha) avalia a condição de primeira ordem em 60 pontos e o alpha contra gamma refaz a otimização em 8 valores. Já o gráfico do alpha contra T sai de graça, porque o alfa não depende de T, e é justamente esse achatamento que o gráfico serve para mostrar.
-
-### `web` (à parte): Interface (F15, F16, NF2)
-
-A camada de apresentação usa o padrão MVC (Model-View-Controller) em cima do módulo principal:
-
-- Model: o pacote `app`, que é a esteira pipes and filters, acessado pela função `app.principal.executar_pipeline`. É onde ficam os dados e a lógica de negócio, e ele não sabe nada sobre a web.
-- Controller: recebe os parâmetros do investidor (gamma, beta, W0, T e os ativos), monta o `config`, chama o Model e entrega o resultado para a View (F15).
-- View: mostra a saída, ou seja, a carteira ótima, as trajetórias de consumo e de riqueza e os gráficos (F16).
-
-Essa parte vive em um projeto separado. A vantagem da separação em MVC é poder trocar a interface, seja outra tela web ou outro tipo de interface, sem precisar mexer no Model, que é o núcleo de cálculo.
 
 ---
 
@@ -351,4 +335,4 @@ Situação atual: os algoritmos das Etapas 0 a 6 estão implementados e testados
 5. Simulação para a frente (Etapas 5 e 6). A função `propagar_riqueza` faz, em cada período, o consumo `c_t* = theta_t · W_t`, investe o que sobrou seguindo o alpha ótimo e propaga a riqueza para o período seguinte.
 6. Validação (Etapas 7 e 8). A função `funcao_valor` confere a consistência de Bellman, e o teste de miopia verifica que a distância entre os alphas obtidos com horizontes diferentes é menor que um epsilon (F12 a F14).
 
-As Etapas 3 e 7 também aparecem no resultado final: os coeficientes `A_t` da recorrência e o `valor_V`, que é a função valor avaliada na riqueza inicial (requisito F11). Antes esses dois ficavam escondidos dentro do agente e eram descartados no fim. A simulação devolve, além da média, os percentis período a período (`trajetoria_W_p5`, `_mediana` e `_p95`), que são necessários para desenhar a banda de confiança, tanto nas figuras de `results/` quanto na web.
+As Etapas 3 e 7 também aparecem no resultado final: os coeficientes `A_t` da recorrência e o `valor_V`, que é a função valor avaliada na riqueza inicial (requisito F11). Antes esses dois ficavam escondidos dentro do agente e eram descartados no fim. A simulação devolve, além da média, os percentis período a período (`trajetoria_W_p5`, `_mediana` e `_p95`), que são necessários para desenhar a banda de confiança nas figuras de `results/`.
