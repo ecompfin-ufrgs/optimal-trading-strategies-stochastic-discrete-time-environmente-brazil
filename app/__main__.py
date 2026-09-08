@@ -1,8 +1,8 @@
 """Ponto de entrada do pacote: ``python -m app``.
 
 Roda a esteira completa (``app.principal.executar_pipeline``) e imprime o
-resultado. Serve para conferir que a aplicação roda de ponta a ponta sem a
-camada web, e para experimentar parâmetros sem editar código:
+resultado. Serve para conferir que a aplicação roda de ponta a ponta, e 
+para experimentar parâmetros sem editar código:
 
     python -m app                                   # base diária, defaults
     python -m app --anos 20 --beta-anual 0.90
