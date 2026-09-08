@@ -1,15 +1,14 @@
-"""app.graficos: as figuras dos resultados (F16).
+"""app.graficos — figuras dos resultados do modelo (F16).
 
-Escreve em results/ as imagens usadas no documento. Este modulo fica fora da
-esteira: o app.principal nao importa ele, e por isso o matplotlib nunca e
-carregado pela camada web, que desenha no navegador a partir do JSON.
+Gera em ``results/`` as ilustrações usadas no documento. Este módulo fica fora
+da esteira: `app.principal` não importa ele, então quem só quer o resultado
+numérico não paga o custo de carregar o matplotlib.
 
-Cada figura leva no rodape as informacoes da rodada que gerou ela: a base, a
-janela dos dados, os parametros e o alpha que saiu. Assim uma figura solta
-continua fazendo sentido, sem depender de um arquivo de metadados a parte que
-poderia ficar desatualizado.
+Cada figura leva no rodapé a **procedência** — base, janela dos dados,
+parâmetros e o α* da rodada. Assim uma figura solta continua auditável: não há
+arquivo de metadados paralelo que possa ficar para trás.
 
-Roda com: python -m app --graficos
+Uso: ``python -m app --graficos`` (os parâmetros são os da própria execução).
 """
 
 import os
@@ -79,7 +78,7 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
     ax.legend()
     escritos.append(_salvar(fig, destino, "foc_G_de_alpha.png", rodape))
 
-    # 2. alpha contra gamma (a hiperbole de Merton)
+    # 2. alpha contra gamma
     alphas = [nucleo.resolver_alpha_otimo(R, Rf, gi)[0] for gi in GRADE_GAMMA]
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(GRADE_GAMMA, alphas, "o-", color="#1f77b4")
