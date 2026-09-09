@@ -77,7 +77,7 @@ def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
         lo *= 2.0
         hi *= 2.0
     raise RuntimeError(
-        f"FOC sem troca de sinal em α ∈ [{lo / 2:.0f}, {hi / 2:.0f}]: não há α* "
+        f"FOC sem troca de sinal em alpha elemento de [{lo / 2:.0f}, {hi / 2:.0f}]: não há alpha* "
         "finito. Verifique se a amostra de R contém cenários acima e abaixo de rf."
     )
 
@@ -93,7 +93,7 @@ def phi_chapeu(alpha, R, rf, gamma):
 
 
 def recorrencia_A(phi, beta, gamma, T):
-    """A_T=1; A_t=[1 + (beta·A_{t+1}·Phi_chapeu)^(1/gamma)]^gamma, t=T−1..0. Shape (T+1,). (F8)"""
+    """A_T=1; A_t=[1 + (beta*A_{t+1}*Phi_chapeu)^(1/gamma)]^gamma, t=T−1..0. Shape (T+1,). (F8)"""
     A = np.empty(T + 1)
     if np.isclose(gamma, 1.0):
         # caso gamma=1 (utilidade log): A_t = (1-beta^(T-t+1))/(1-beta), nao usa o phi
@@ -117,7 +117,7 @@ def fracoes_consumo(A, gamma):
 
 
 def funcao_valor(A, W, gamma):
-    """V_t(W) = A_t·W^(1−gamma)/(1−gamma) (gamma diferente de 1) ou A_t·ln(W) (gamma=1). (F11)"""
+    """V_t(W) = A_t·W^(1−gamma)/(1−gamma) (gamma diferente de 1) ou A_t*ln(W) (gamma=1). (F11)"""
     A = np.asarray(A, dtype=float)
     if np.isclose(gamma, 1.0):
         return A * np.log(W)
