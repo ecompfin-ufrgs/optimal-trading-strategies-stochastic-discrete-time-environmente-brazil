@@ -27,7 +27,7 @@ _MAX_EXPANSOES = 8
 
 
 def funcao_foc(alpha, R, rf, gamma):
-    """G(alpha) = E[(R − rf·1) / R_p^γ], com R_p = rf + αᵀ(R − rf·1). Shape (N,). (F6)"""
+    """G(alpha) = E[(R − rf*1) / R_p^gamma], com R_p = rf + alpha^T(R − rf*1). Shape (N,). (F6)"""
     alpha = np.asarray(alpha, dtype=float)
     excesso = R - rf                                    # (n, N)
     R_p = np.maximum(rf + excesso @ alpha, _TOL_FALENCIA)  # (n,)
@@ -83,7 +83,7 @@ def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
 
 
 def phi_chapeu(alpha, R, rf, gamma):
-    """Phi_chapeu = E[R_p^(1−γ)] do portfólio ótimo (ou E[ln R_p] se γ=1). (F7)"""
+    """Phi_chapeu = E[R_p^(1−gamma)] do portfólio ótimo (ou E[ln R_p] se gamma=1). (F7)"""
     alpha = np.asarray(alpha, dtype=float)
     excesso = R - rf
     R_p = np.maximum(rf + excesso @ alpha, _TOL_FALENCIA)
@@ -93,7 +93,7 @@ def phi_chapeu(alpha, R, rf, gamma):
 
 
 def recorrencia_A(phi, beta, gamma, T):
-    """A_T=1; A_t=[1 + (beta·A_{t+1}·Phi_chapeu)^(1/γ)]^γ, t=T−1..0. Shape (T+1,). (F8)"""
+    """A_T=1; A_t=[1 + (beta·A_{t+1}·Phi_chapeu)^(1/gamma)]^gamma, t=T−1..0. Shape (T+1,). (F8)"""
     A = np.empty(T + 1)
     if np.isclose(gamma, 1.0):
         # caso gamma=1 (utilidade log): A_t = (1-beta^(T-t+1))/(1-beta), nao usa o phi
@@ -109,7 +109,7 @@ def recorrencia_A(phi, beta, gamma, T):
 
 
 def fracoes_consumo(A, gamma):
-    """theta_t = A_t^(−1/γ) (ou 1/A_t se γ=1). (F8)"""
+    """theta_t = A_t^(−1/gamma) (ou 1/A_t se gamma=1). (F8)"""
     A = np.asarray(A, dtype=float)
     if np.isclose(gamma, 1.0):
         return 1.0 / A
@@ -117,7 +117,7 @@ def fracoes_consumo(A, gamma):
 
 
 def funcao_valor(A, W, gamma):
-    """V_t(W) = A_t·W^(1−γ)/(1−γ) (γ diferente de 1) ou A_t·ln(W) (γ=1). (F11)"""
+    """V_t(W) = A_t·W^(1−gamma)/(1−gamma) (gamma diferente de 1) ou A_t·ln(W) (gamma=1). (F11)"""
     A = np.asarray(A, dtype=float)
     if np.isclose(gamma, 1.0):
         return A * np.log(W)
