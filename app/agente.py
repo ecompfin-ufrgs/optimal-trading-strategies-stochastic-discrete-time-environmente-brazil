@@ -8,7 +8,7 @@ conduz a decisao dele, deixando as contas por conta do app.nucleo
 A decisao acontece nesta ordem:
   1. sorteia cenarios de retorno do mercado (liquidos);
   2. converte pra fator bruto e corta em zero;
-  3. acha a carteira otima e guarda o alfa e o phi;
+  3. acha a carteira otima e guarda o alpha e o phi;
   4. usa a recorrencia A_t pra chegar nas fracoes de consumo.
 """
 
