@@ -23,11 +23,11 @@ class Investidor:
 
     def __init__(self, gamma: float, beta: float, w0: float, horizonte: int) -> None:
         if gamma <= 0:
-            raise ValueError("γ (aversão ao risco) deve ser > 0.")
+            raise ValueError("gamma (aversão ao risco) deve ser > 0.")
         if not 0.0 < beta < 1.0:
-            raise ValueError("β (fator de desconto) deve estar em (0, 1).")
+            raise ValueError("beta (fator de desconto) deve estar em (0, 1).")
         if w0 <= 0:
-            raise ValueError("W₀ (riqueza inicial) deve ser > 0.")
+            raise ValueError("W_0 (riqueza inicial) deve ser > 0.")
         if horizonte < 1:
             raise ValueError("horizonte T deve ser ≥ 1.")
         self.gamma = float(gamma)
@@ -40,14 +40,14 @@ class Investidor:
 
     # utilidade CRRA (F5)
     def utilidade(self, c):
-        """u(c) = c^(1−γ)/(1−γ) (ou ln c se γ=1). (F5)"""
+        """u(c) = c^(1−gamma)/(1−gamma) (ou ln c se gamma=1). (F5)"""
         c = np.asarray(c, dtype=float)
         if np.isclose(self.gamma, 1.0):
             return np.log(c)
         return c ** (1.0 - self.gamma) / (1.0 - self.gamma)
 
     def utilidade_marginal(self, c):
-        """u'(c) = c^(−γ). (F5)"""
+        """u'(c) = c^(−gamma). (F5)"""
         return np.asarray(c, dtype=float) ** (-self.gamma)
 
     # decisao de carteira e de consumo (F6, F8, F9)
@@ -64,21 +64,21 @@ class Investidor:
         """
         r = mercado.amostrar(n_scenarios, seed=seed)
         rf_bruto = 1.0 + rf
-        R = np.maximum(1.0 + r, 0.0)  # resp. limitada do ativo: preço não fica < 0
+        R = np.maximum(1.0 + r, 0.0)  # preço não fica < 0
         alpha = nucleo.resolver_alpha_otimo(R, rf_bruto, self.gamma, **opts)
         self._alpha_star = alpha
         self._phi_hat = nucleo.phi_chapeu(alpha, R, rf_bruto, self.gamma)
         return alpha
 
     def fracoes_consumo(self) -> np.ndarray:
-        """Frações de consumo theta_t = A_t^(−1/γ), t=0..T. (F8, F9)
+        """Frações de consumo theta_t = A_t^(−1/gamma), t=0..T. (F8, F9)
 
         Requer carteira_otima(...) chamado antes (usa o Phi_chapeu guardado).
         """
         if self._phi_hat is None:
             raise RuntimeError(
                 "chame carteira_otima() antes de fracoes_consumo(): "
-                "as fracoes de consumo dependem do phi, que sai da carteira."
+                "as fracoes de consumo dependem do Phi, que sai da carteira."
             )
         self._A = nucleo.recorrencia_A(self._phi_hat, self.beta, self.gamma, self.horizonte)
         return nucleo.fracoes_consumo(self._A, self.gamma)
