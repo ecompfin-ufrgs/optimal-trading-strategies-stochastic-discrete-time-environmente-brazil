@@ -145,7 +145,7 @@ def executar_pipeline(config: dict) -> dict:
         "alpha_star": alpha,                              # carteira ótima
         "phi_hat": inv.phi_hat,
         "theta": theta,                                   # frações de consumo
-        "consumo_inicial": float(theta[0] * inv.w0),      # c_0 = θ_0·W_0
+        "consumo_inicial": float(theta[0] * inv.w0),
         "horizonte": T,
         "E_W_T": float(W_T.mean()),
         "W_T_p5": float(np.percentile(W_T, 5)),
