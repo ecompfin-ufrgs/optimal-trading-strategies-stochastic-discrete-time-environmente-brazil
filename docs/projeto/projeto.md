@@ -163,7 +163,7 @@ O requisito NF5 pede também a separação de paradigmas, que ficou assim:
 +-----------------------------+
 ```
 
-Quem liga tudo isso na ordem certa é o módulo principal (`app.principal`, NF5). A validação (F12 a F14) fica nos testes, que conferem o alfa ótimo, as frações de consumo e a convergência a Merton. A ingestão (`app.ingestao`) é o passo que baixa Ibovespa e CDI e enche o SQLite que aparece lá no topo do desenho.
+Quem liga tudo isso na ordem certa é o módulo principal (`app.principal`, NF5). A validação (F12 a F14) fica nos testes, que conferem o alpha ótimo, as frações de consumo e a convergência a Merton. A ingestão (`app.ingestao`) é o passo que baixa Ibovespa e CDI e enche o SQLite que aparece lá no topo do desenho.
 
 ---
 
@@ -257,7 +257,7 @@ class Investidor:
         """Frações de consumo theta_t = A_t^(−1/γ), t=0..T. (F8, F9)"""
 ```
 
-Vale explicar como o beta se relaciona com a frequência dos dados. O beta é um número sem unidade e, com a hipótese de retornos independentes e identicamente distribuídos, ele nem aparece na condição de primeira ordem que resolve o alpha. É exatamente por isso que a carteira ótima não muda com o tempo e a miopia acontece. Isso foi conferido no número: variando o beta de 0,90 até 0,9999 na base diária, o alfa ótimo e o Phi ficam iguais. O que o beta governa é a recorrência `A_t` e, por consequência, as frações de consumo.
+Vale explicar como o beta se relaciona com a frequência dos dados. O beta é um número sem unidade e, com a hipótese de retornos independentes e identicamente distribuídos, ele nem aparece na condição de primeira ordem que resolve o alpha. É exatamente por isso que a carteira ótima não muda com o tempo e a miopia acontece. Isso foi conferido no número: variando o beta de 0,90 até 0,9999 na base diária, o alpha ótimo e o Phi ficam iguais. O que o beta governa é a recorrência `A_t` e, por consequência, as frações de consumo.
 
 O problema é que o beta entra elevado a `t`, e `t` conta períodos, então o mesmo número descreve investidores completamente diferentes conforme a frequência dos dados. Um beta de 0,96 ao mês equivale a 0,613 ao ano, mas um beta de 0,96 por pregão equivale a 3,4 × 10⁻⁵ ao ano, o que seria um investidor que consome 92% da riqueza logo no primeiro ano. Para não cair nessa confusão, o `app.__main__` fixa o desconto em termos anuais (`BETA_ANUAL = 0.96`) e converte para o período: no diário fica `beta_pregao = beta_anual^(1/252) = 0,999838`. Ao reportar um resultado é bom sempre dizer as duas formas.
 
@@ -267,29 +267,29 @@ Cada função é uma equação do artigo e dá para testar isolada das outras.
 
 ```python
 def funcao_foc(alpha, R, rf, gamma):
-    """G(alpha) = E[(R − rf·1)/(rf + alpha^T(R − rf·1))^γ]. (F6)"""
+    """G(alpha) = E[(R − rf·1)/(rf + alpha^T(R − rf·1))^gamma]. (F6)"""
 
 def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
     """Resolve G(alpha*)=0 — alpha pertence a R^N irrestrito (ver nota abaixo);
     SLSQP para N≥2, brentq para N=1. (F6)"""
 
 def phi_chapeu(alpha, R, rf, gamma):
-    """Phi_chapeu = E[R_p^(1−γ)] do portfólio ótimo. (F7)"""
+    """Phi_chapeu = E[R_p^(1−gamma)] do portfólio ótimo. (F7)"""
 
 def recorrencia_A(phi, beta, gamma, T):
-    """A_T=1; A_t=[1+(beta·A_{t+1}·Phi_chapeu)^(1/γ)]^γ, t=T−1..0. (F8)"""
+    """A_T=1; A_t=[1+(beta·A_{t+1}·Phi_chapeu)^(1/gamma)]^gamma, t=T−1..0. (F8)"""
 
 def fracoes_consumo(A, gamma):
-    """theta_t = A_t^(−1/γ). (F8)"""
+    """theta_t = A_t^(−1/gamma). (F8)"""
 
 def propagar_riqueza(w0, theta, alpha, R, rf):
     """Forward pass: W_{t+1}=S_t·R*_{p,t+1}; devolve W_t, c_t*, S_t. (F9, F10)"""
 
 def funcao_valor(A, W, gamma):
-    """V_t(W) = A_t·W^(1−γ)/(1−γ). (F11)"""
+    """V_t(W) = A_t·W^(1−gamma)/(1−gamma). (F11)"""
 ```
 
-Uma observação sobre o domínio dos pesos. A função `resolver_alpha_otimo` é sempre irrestrita, ou seja, o alfa pode ser qualquer número real, o que admite venda a descoberto (alfa negativo) e alavancagem (a soma dos pesos passando de 1), sem nenhum teto. Não existe opção para exigir carteira só comprada nem para impor limites. No caso de um ativo só, o `brentq` começa procurando no intervalo de −20 a 20 e vai dobrando esse intervalo até a função G trocar de sinal. Se ela nunca trocar, quer dizer que não existe nenhum cenário com o retorno do ativo abaixo da taxa livre de risco. Nesse caso não há alpha ótimo finito e a função levanta um `RuntimeError` em vez de devolver um valor qualquer.
+Uma observação sobre o domínio dos pesos. A função `resolver_alpha_otimo` é sempre irrestrita, ou seja, o alpha pode ser qualquer número real, o que admite venda a descoberto (alpha negativo) e alavancagem (a soma dos pesos passando de 1), sem nenhum teto. Não existe opção para exigir carteira só comprada nem para impor limites. No caso de um ativo só, o `brentq` começa procurando no intervalo de −20 a 20 e vai dobrando esse intervalo até a função G trocar de sinal. Se ela nunca trocar, quer dizer que não existe nenhum cenário com o retorno do ativo abaixo da taxa livre de risco. Nesse caso não há alpha ótimo finito e a função levanta um `RuntimeError` em vez de devolver um valor qualquer.
 
 ### `app.principal`: Orquestrador (F10, NF5)
 
@@ -304,7 +304,7 @@ O número de cenários (`n_scenarios`) precisa de atenção, porque depende da f
 
 ### `app.graficos`: Figuras dos resultados (F16)
 
-Gera em `results/` as seis figuras usadas no documento: a curva G(alpha) com a raiz marcada, o alfa ótimo contra gamma (a hipérbole de Merton), o alfa ótimo contra o horizonte T (que fica reto, mostrando a miopia), as frações de consumo, a trajetória da riqueza com a faixa entre os percentis 5 e 95, e o consumo somado por ano.
+Gera em `results/` as seis figuras usadas no documento: a curva G(alpha) com a raiz marcada, o alpha ótimo contra gamma, o alpha ótimo contra o horizonte T (que fica reto, mostrando a miopia), as frações de consumo, a trajetória da riqueza com a faixa entre os percentis 5 e 95, e o consumo somado por ano.
 
 ```python
 def gerar(res, mercado, rf, cfg, rodape, periodos_por_ano,
@@ -316,9 +316,9 @@ O módulo é acionado por `python -m app --graficos`, na mesma execução que fa
 
 O matplotlib fica isolado de propósito. O `app.principal` não importa este módulo, e no `__main__` o import só acontece se a flag for usada. Sem a flag o matplotlib nem chega a ser carregado. Assim quem só quer o resultado numérico não paga o tempo de inicialização de uma biblioteca de gráficos inteira, e o núcleo de cálculo continua sem depender dela.
 
-Cada PNG leva no rodapé as informações da rodada que o gerou: a base, a janela dos dados, gamma, beta anual, T, o `n_scenarios`, a semente e o alfa ótimo. A alternativa seria guardar isso num arquivo de metadados separado, mas aí seria fácil o arquivo ficar para trás; do jeito que está, a legenda acompanha a imagem quando ela vai para dentro do documento. As figuras ficam versionadas no repositório, porque o texto se refere a elas.
+Cada PNG leva no rodapé as informações da rodada que o gerou: a base, a janela dos dados, gamma, beta anual, T, o `n_scenarios`, a semente e o alpha ótimo. A alternativa seria guardar isso num arquivo de metadados separado, mas aí seria fácil o arquivo ficar para trás; do jeito que está, a legenda acompanha a imagem quando ela vai para dentro do documento. As figuras ficam versionadas no repositório, porque o texto se refere a elas.
 
-Dois desses gráficos refazem a otimização e por isso custam tempo: o G(alpha) avalia a condição de primeira ordem em 60 pontos e o alpha contra gamma refaz a otimização em 8 valores. Já o gráfico do alpha contra T sai de graça, porque o alfa não depende de T, e é justamente esse achatamento que o gráfico serve para mostrar.
+Dois desses gráficos refazem a otimização e por isso custam tempo: o G(alpha) avalia a condição de primeira ordem em 60 pontos e o alpha contra gamma refaz a otimização em 8 valores. Já o gráfico do alpha contra T sai de graça, porque o alpha não depende de T, e é justamente esse achatamento que o gráfico serve para mostrar.
 
 ---
 
