@@ -18,9 +18,24 @@ class RendaFixa:
         """
         Recebe o CDI anual em decimal (0.10 para 10% ao ano) e em quantos
         periodos o ano e dividido: 12 se a base for mensal, 252 se for diaria.
+
+        O cdi_anual tem que ser maior que -1 e o periodos_por_ano, pelo menos
+        1; fora disso a conversao do retorno_livre_risco nao esta definida.
         """
-        self.cdi_anual = float(cdi_anual)
-        self.periodos_por_ano = int(periodos_por_ano)
+        cdi_anual = float(cdi_anual)
+        periodos_por_ano = int(periodos_por_ano)
+        if cdi_anual <= -1.0:
+            raise ValueError(
+                f"cdi_anual deve ser > -1; veio {cdi_anual:g}. A conversão "
+                "eleva (1 + cdi_anual) a 1/periodos_por_ano, e com a base "
+                "negativa o resultado sai complexo. "
+            )
+        if periodos_por_ano < 1:
+            raise ValueError(
+                f"periodos_por_ano deve ser >= 1; veio {periodos_por_ano}."
+            )
+        self.cdi_anual = cdi_anual
+        self.periodos_por_ano = periodos_por_ano
 
     def retorno_livre_risco(self) -> float:
         """A taxa livre de risco de um periodo, liquida. (F3)
