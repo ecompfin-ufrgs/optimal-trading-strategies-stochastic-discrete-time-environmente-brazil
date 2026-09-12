@@ -222,7 +222,8 @@ Cada classe representa um mercado e entrega o que o agente precisa. Isso corresp
 ```python
 class RendaFixa:
     """Mercado de renda fixa (CDI) — fornece a taxa livre de risco. (F3)"""
-    def __init__(self, cdi_anual: float) -> None: ...
+    def __init__(self, cdi_anual: float, periodos_por_ano: int = 12) -> None:
+        """Valida cdi_anual > -1 e periodos_por_ano >= 1 (domínio da conversão)."""
     def retorno_livre_risco(self) -> float:
         """Taxa livre de risco R_f por período (líquida; o fator bruto é 1+R_f). (F3)"""
 
@@ -236,6 +237,19 @@ class RendaVariavel:
     def amostrar(self, n: int, seed: int | None = None) -> "ndarray":
         """Gera n cenários de retorno R normalmente distribuido para o Monte Carlo."""
 ```
+
+O `periodos_por_ano` da `RendaFixa` é o que faz a conversão de ano para período, e a conversão é composta: `R_f = (1 + cdi_anual)^(1/periodos_por_ano) − 1`. Dizer só "CDI de 13%" não basta, porque o mesmo número vira `0.000489` por pregão ou `0.01024` por mês.
+
+A classe valida as duas entradas no construtor, como as outras entidades do projeto fazem com as suas: o `cdi_anual` tem que ser maior que −1 e o `periodos_por_ano`, pelo menos 1. O motivo é que a conversão eleva `(1 + cdi_anual)` a um expoente fracionário: com a base negativa o resultado sai **complexo**, e o problema é que isso não estoura — o numpy descarta a parte imaginária mais adiante, o R_f fica errado e a esteira devolve um α\* de aparência normal. Um erro silencioso é pior que uma exceção, então a barreira fica na entrada.
+
+Essa checagem é de domínio, e não de plausibilidade. Quem recusa valores apenas implausíveis (um CDI de 300% ao ano, por exemplo, quase sempre é `3` digitado no lugar de `0.03`) é a interface de linha de comando, que limita o `--cdi-anual` à faixa de −0,5 a 1,0. São responsabilidades diferentes: o limite matemático vale para qualquer chamador, inclusive os notebooks que usam `executar_pipeline` direto; o de plausibilidade só faz sentido onde existe alguém digitando.
+
+A taxa livre de risco pode entrar por dois caminhos, e quem decide entre eles é o `app.principal`:
+
+1. **`cdi_anual` no config** (que é o que a flag `--cdi-anual` preenche): o valor é declarado ao ano e convertido pela `RendaFixa`. Serve para cenários contrafactuais, do tipo "e se o CDI fosse 8%?", e nesse caso a coluna `cdi` dos dados é ignorada.
+2. **A coluna `cdi` dos dados** (o padrão): usa-se a média da série, que já vem na frequência da base. É a média aritmética das taxas por período; a diferença para a média geométrica aparece só na oitava casa decimal, porque o CDI diário varia pouco.
+
+Se nenhum dos dois existir, sobra um `rf` avulso no config, que por padrão é zero. Pela linha de comando esse terceiro caso não acontece, porque a base sintética de demonstração também traz uma coluna `cdi`.
 
 ### `app.agente`: Indivíduo / Investidor (F5, F6, F8, F9)
 
@@ -300,13 +314,17 @@ def executar_pipeline(config: dict) -> dict:
     """DAL → mercado → agente → simulação; devolve o resultado (alpha*, theta_t, trajetórias, métricas). (NF5)"""
 ```
 
-O número de cenários (`n_scenarios`) precisa de atenção, porque depende da frequência dos dados. O padrão de 80 000 serve bem para séries mensais. Quem chama a função precisa escolher o `n_scenarios` de acordo com a base. O `app.__main__` usa 4 milhões no diário e 200 mil no mensal.
+O número de cenários (`n_scenarios`) precisa de atenção, porque depende da frequência dos dados. Quando ele não vem no config, o padrão sai da própria frequência: 200 mil para séries mensais e 4 milhões para séries diárias. A base diária precisa de muito mais porque o excesso de retorno de um pregão é pequeno perto do seu desvio-padrão, e com poucos cenários o α* oscila bastante de uma rodada para outra. O `app.__main__` usa esses mesmos valores.
 
 ### `app.graficos`: Figuras dos resultados (F16)
 
 Gera em `results/` as seis figuras usadas no documento: a curva G(alpha) com a raiz marcada, o alpha ótimo contra gamma, o alpha ótimo contra o horizonte T (que fica reto, mostrando a miopia), as frações de consumo, a trajetória da riqueza com a faixa entre os percentis 5 e 95, e o consumo somado por ano.
 
 ```python
+def montar_rodape(res, cfg, periodo, n_obs, beta_anual, anos, unidade,
+                  dados_reais=True) -> str:
+    """Texto de procedência (duas linhas) impresso em todas as figuras."""
+
 def gerar(res, mercado, rf, cfg, rodape, periodos_por_ano,
           destino="results") -> list[str]:
     """Escreve as figuras e devolve os caminhos."""
@@ -316,7 +334,11 @@ O módulo é acionado por `python -m app --graficos`, na mesma execução que fa
 
 O matplotlib fica isolado de propósito. O `app.principal` não importa este módulo, e no `__main__` o import só acontece se a flag for usada. Sem a flag o matplotlib nem chega a ser carregado. Assim quem só quer o resultado numérico não paga o tempo de inicialização de uma biblioteca de gráficos inteira, e o núcleo de cálculo continua sem depender dela.
 
-Cada PNG leva no rodapé as informações da rodada que o gerou: a base, a janela dos dados, gamma, beta anual, T, o `n_scenarios`, a semente e o alpha ótimo. A alternativa seria guardar isso num arquivo de metadados separado, mas aí seria fácil o arquivo ficar para trás; do jeito que está, a legenda acompanha a imagem quando ela vai para dentro do documento. As figuras ficam versionadas no repositório, porque o texto se refere a elas.
+Cada PNG leva no rodapé as informações da rodada que o gerou, em duas linhas. A de cima diz de onde vieram os números: a série, se a base é real ou sintética, a janela e o número de observações, e o R_f anualizado com a sua origem (`série CDI` ou `informado`, conforme a flag `--cdi-anual` tenha sido usada ou não). A de baixo traz os parâmetros: gamma, beta anual, T, W₀, o `n_scenarios`, o `n_paths` e a semente, terminando no alpha ótimo. Com isso a figura sozinha basta para refazer a rodada.
+
+A quebra em duas linhas não é estética. Em uma linha só o texto passava de 7 polegadas, que é a largura das figuras, e como o `savefig` usa `bbox_inches="tight"` o excesso não era cortado: o PNG é que saía mais largo, e cada figura acabava com uma dimensão diferente.
+
+Marcar se a base é real ou sintética importa porque a série de demonstração usa datas plausíveis; sem essa marca, uma figura gerada sem banco ficaria indistinguível de uma gerada com dados do Yahoo e do Banco Central. A alternativa a tudo isso seria guardar a procedência num arquivo de metadados separado, mas aí seria fácil o arquivo ficar para trás; do jeito que está, a legenda acompanha a imagem quando ela vai para dentro do documento. As figuras ficam versionadas no repositório, porque o texto se refere a elas.
 
 Dois desses gráficos refazem a otimização e por isso custam tempo: o G(alpha) avalia a condição de primeira ordem em 60 pontos e o alpha contra gamma refaz a otimização em 8 valores. Já o gráfico do alpha contra T sai de graça, porque o alpha não depende de T, e é justamente esse achatamento que o gráfico serve para mostrar.
 
@@ -328,7 +350,7 @@ Dois desses gráficos refazem a otimização e por isso custam tempo: o G(alpha)
 
 Situação atual: os algoritmos das Etapas 0 a 6 estão implementados e testados (tarefas 4 a 7, com um notebook por requisito dentro de `tests/`). A integração com o QuantEcon (tarefa 8) está no `tests/19_algoritmo_quantecon.ipynb`, que refaz a solução por programação dinâmica com quadratura (`qnwnorm` mais `brentq`) e confirma a miopia.
 
-1. Calibração (Etapa 0). As funções `media` e `covariancia` calculam os estimadores amostrais em cima dos retornos, e a taxa livre de risco vem do CDI.
+1. Calibração (Etapa 0). As funções `media` e `covariancia` calculam os estimadores amostrais em cima dos retornos. A taxa livre de risco vem do CDI: por padrão, da média da coluna `cdi` dos dados, que já está na frequência da base; se o usuário informar um CDI anual (`--cdi-anual`), é esse valor que vale, convertido para o período pela `RendaFixa`.
 2. Carteira ótima (Etapa 1). A função `resolver_alpha_otimo` maximiza J(alpha) = E[u(R_p)] resolvendo a condição de primeira ordem G(alpha) = 0. Para dois ativos ou mais usa o SLSQP; para um ativo só usa o `brentq`. As esperanças são calculadas por Monte Carlo sobre cenários sorteados de uma normal com a média e a covariância estimadas. O alpha é sempre irrestrito, admitindo venda a descoberto e alavancagem, sem teto. Isso é resolvido uma vez só, por causa da miopia.
 3. Phi (Etapa 2). A função `phi_chapeu` calcula a esperança E[R_p^(1−gamma)] do portfólio ótimo, também uma vez só, e o valor é reaproveitado depois.
 4. Coeficientes A_t e frações de consumo (Etapas 3 e 4). As funções `recorrencia_A` e `fracoes_consumo` fazem a indução retroativa, de t = T até t = 0. Essa parte é pura álgebra, não tem otimização nenhuma.
