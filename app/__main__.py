@@ -1,24 +1,18 @@
 """Ponto de entrada do pacote: ``python -m app``.
 
 Roda a esteira completa (``app.principal.executar_pipeline``) e imprime o
-resultado. Serve para conferir que a aplicação roda de ponta a ponta, e 
+resultado. Serve para conferir que a aplicação roda de ponta a ponta, e
 para experimentar parâmetros sem editar código:
 
     python -m app                                   # base diária, defaults
     python -m app --anos 20 --beta-anual 0.90
     python -m app --mensal --anos 10
+    python -m app --cdi-anual 0.08                  # R_f hipotético, 8% a.a.
     python -m app --graficos                        # + figuras em results/
     python -m app --help                            # lista tudo
 
 Se o banco não existir, uma série sintética na frequência pedida mantém a
 demonstração offline e reprodutível.
-
-Sobre o beta: ele e escolhido em termos anuais e convertido pro periodo dos
-dados, com beta_anual elevado a 1 sobre periodos_por_ano. O beta nao muda a
-carteira otima, porque ele nem aparece na condicao de primeira ordem do alfa, e
-e justamente isso que se chama de miopia. O que ele governa e a recorrencia A_t
-e, por consequencia, as fracoes de consumo. Declarar o valor ao ano evita a
-confusao de dizer "beta = 0.96" sem falar a que periodo se refere.
 """
 
 import argparse
@@ -51,7 +45,7 @@ def _dados_demo(perfil: dict, n: int = 1_050, seed: int = 7) -> pd.DataFrame:
     """
     Serie inventada de retornos, na frequencia do perfil escolhido.
     """
-    
+
     rng = np.random.default_rng(seed)
     ruido = rng.normal(0.0, perfil["sigma"], n)
     ruido -= ruido.mean()                       # média exatamente 0
@@ -77,6 +71,10 @@ def _analisar(argv) -> argparse.Namespace:
                    help="fator de desconto ANUAL (convertido para o período)")
     p.add_argument("--gamma", type=float, default=GAMMA,
                    help="coeficiente de aversao relativa ao risco")
+    p.add_argument("--cdi-anual", type=float, default=None,
+                   help="CDI ANUAL em decimal (0.13 = 13%% a.a.), convertido "
+                        "para o periodo; se omitido, usa a media da serie de "
+                        "CDI dos dados")
     p.add_argument("--w0", type=float, default=W0, help="riqueza inicial")
     p.add_argument("--n-scenarios", type=int, default=0,
                    help="cenarios de Monte Carlo; 0 = automatico por frequencia "
@@ -86,7 +84,11 @@ def _analisar(argv) -> argparse.Namespace:
     p.add_argument("--seed", type=int, default=1, help="semente (reprodutibilidade)")
     p.add_argument("--graficos", action="store_true",
                    help="alem de imprimir, escreve as figuras em results/")
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+    if args.cdi_anual is not None and not -0.5 < args.cdi_anual < 1.0:
+        p.error(f"--cdi-anual e em decimal e deve ficar entre -0.5 e 1.0; veio "
+                f"{args.cdi_anual:g}. Para 13% ao ano use 0.13, e nao 13.")
+    return args
 
 
 def main(argv=()) -> None:
@@ -102,12 +104,19 @@ def main(argv=()) -> None:
              "beta_anual": args.beta_anual, "w0": args.w0,
              "horizonte": T, "n_scenarios": n_scenarios,
              "n_paths": args.n_paths, "seed": args.seed}
-    if os.path.exists(perfil["db"]):
-        print(f"(dados REAIS: {perfil['db']} - R_f vem da serie real do CDI)")
+    if args.cdi_anual is not None:
+        comum["cdi_anual"] = args.cdi_anual
+
+    origem_rf = ("do --cdi-anual" if args.cdi_anual is not None
+                 else "da serie de CDI dos dados")
+    dados_reais = os.path.exists(perfil["db"])
+    if dados_reais:
+        print(f"(dados REAIS: {perfil['db']} - R_f vem {origem_rf})")
         config = {"db_path": perfil["db"], "tabela": "retornos", **comum}
     else:
         alvo = "--diario" if ppa == 252 else ""
-        print("(SEM banco real -> dados SINTETICOS de demonstracao)")
+        print(f"(SEM banco real -> dados SINTETICOS de demonstracao; "
+              f"R_f vem {origem_rf})")
         print(f"  para baixar dados reais:  python -m app.ingestao 2022-05-22 {alvo}".rstrip())
         config = {"retornos": _dados_demo(perfil), **comum}
     res = executar_pipeline(config)
@@ -144,7 +153,8 @@ def main(argv=()) -> None:
         mercado = RendaVariavel(ret[["data"] + config["ativos"]])
         rodape = graficos.montar_rodape(
             res, comum, (ret["data"].iloc[0], ret["data"].iloc[-1]), len(ret),
-            args.beta_anual, args.anos, "diario" if ppa == 252 else "mensal")
+            args.beta_anual, args.anos, "diario" if ppa == 252 else "mensal",
+            dados_reais=dados_reais)
         escritos = graficos.gerar(res, mercado, res["rf"], comum, rodape, ppa)
         print(f"Figuras escritas em {graficos.DESTINO_PADRAO}/:")
         for c in escritos:
