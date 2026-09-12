@@ -4,9 +4,9 @@ Gera em results/ as ilustrações usadas no documento. Este módulo fica fora
 da esteira: `app.principal` não importa ele, então quem só quer o resultado
 numérico não paga o custo de carregar o matplotlib.
 
-Cada figura leva no rodapé a procedência (base, janela dos dados,
-parâmetros e o alpha* da rodada). Assim uma figura solta continua auditável: não há
-arquivo de metadados paralelo que possa ficar para trás.
+Cada figura leva no rodapé a procedência, em duas linhas: de onde vieram os
+números (a série, se a base é real ou sintética, a janela e o R_f) e com que
+parâmetros a rodada foi feita.
 
 Uso: python -m app --graficos (os parâmetros são os da própria execução).
 """
@@ -27,9 +27,10 @@ GRADE_GAMMA = (1.5, 2.0, 3.0, 5.0, 8.0, 10.0, 15.0, 20.0)
 
 
 def _rodape(fig, texto: str) -> None:
-    """Escreve a linha de informacoes no rodape da figura."""
-    fig.text(0.5, 0.012, texto, ha="center", fontsize=6.5, color="0.45")
-    fig.subplots_adjust(bottom=0.22)
+    """Escreve as duas linhas de informacoes no rodape da figura."""
+    fig.text(0.5, 0.012, texto, ha="center", va="bottom", fontsize=6.5,
+             color="0.45", linespacing=1.5)
+    fig.subplots_adjust(bottom=0.26)
 
 
 def _salvar(fig, destino: str, nome: str, rodape: str) -> str:
@@ -41,11 +42,18 @@ def _salvar(fig, destino: str, nome: str, rodape: str) -> str:
 
 
 def montar_rodape(res: dict, cfg: dict, periodo: tuple[str, str], n_obs: int,
-                  beta_anual: float, anos: float, unidade: str) -> str:
-    """Texto de procedência impresso em todas as figuras."""
-    return (f"Ibovespa {unidade} · {periodo[0]} a {periodo[1]} ({n_obs} obs) · "
+                  beta_anual: float, anos: float, unidade: str,
+                  dados_reais: bool = True) -> str:
+    """Texto de procedência impresso em todas as figuras.
+    """
+    rf_anual = (1.0 + res["rf"]) ** cfg["periodos_por_ano"] - 1.0
+    origem_rf = "informado" if cfg.get("cdi_anual") is not None else "série CDI"
+    fonte = "dados reais" if dados_reais else "dados SINTÉTICOS"
+    return (f"Ibovespa {unidade} ({fonte}) · {periodo[0]} a {periodo[1]} "
+            f"({n_obs} obs) · R_f={rf_anual:.2%} a.a. ({origem_rf})\n"
             f"γ={cfg['gamma']:g} · β={beta_anual:g} a.a. · T={anos:g} anos · "
-            f"{cfg['n_scenarios']:,} cenários · seed {cfg['seed']} · "
+            f"W₀={cfg['w0']:g} · {cfg['n_scenarios']:,} cenários · "
+            f"{cfg['n_paths']:,} trajetórias · seed {cfg['seed']} · "
             f"α*={res['alpha_star'][0]:.4f}".replace(",", "."))
 
 
