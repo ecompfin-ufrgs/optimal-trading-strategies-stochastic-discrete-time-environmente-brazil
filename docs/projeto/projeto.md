@@ -17,11 +17,11 @@ O sistema começa obtendo os **dados brutos** do Ibovespa e do CDI. Em seguida, 
 
 ```
    dados brutos          retornos por periodo       parametros          trajetorias
- (ibovespa, cdi)   ->        (retornos)        ->  (parametros)  ->    (em memoria)
+ (ibovespa, cdi)   ->        (retornos)        ->  (em memoria)  ->    (em memoria)
                                                                         [resultado]
 ```
 
-Os dados brutos e os derivados ficam guardados de forma permanente em SQLite (NF6), e quem cuida disso é a camada DAL (Data Access Layer). O resto da sequência de etapas de processamento, o pipeline, lê do banco e não refaz o download a cada execução.
+Os dados brutos e os retornos derivados deles ficam guardados de forma permanente em SQLite (NF6), e quem cuida disso é a camada DAL (Data Access Layer). O resto da sequência de etapas de processamento, o pipeline, lê do banco e não refaz o download a cada execução.
 
 ### Modelo de dados (esquema SQLite)
 
@@ -47,14 +47,6 @@ A escolha foi ter uma tabela de dados brutos para cada mercado e mais uma tabela
               | data  TEXT PK  |
               | ibov  REAL     |
               | cdi   REAL     |
-              +-------+--------+
-                      |  calibracao (Etapa 0): media, covariancia, R_f
-                      v
-              +----------------+
-              |   parametros   |
-              +----------------+
-              | chave TEXT PK  |
-              | valor REAL     |
               +----------------+
 ```
 
@@ -71,8 +63,8 @@ A ligação entre `ibovespa`/`cdi` e `retornos` é feita pela data, já que as t
 | `retornos` | `data` | TEXT | PK, `AAAA-MM`\|`AAAA-MM-DD`, não nulo | período da observação | `2000-02` |
 | `retornos` | `ibov` | REAL | não nulo | retorno do Ibovespa no período (decimal) | `-0.0315` |
 | `retornos` | `cdi` | REAL | não nulo | retorno livre de risco do período (decimal) | `0.0149` |
-| `parametros` | `chave` | TEXT | PK, não nulo | nome do parâmetro calibrado | `mu_ibov` |
-| `parametros` | `valor` | REAL | não nulo | valor do parâmetro | `0.0107` |
+
+São três tabelas, e mais nenhuma. Os parâmetros calibrados, ou seja, a média, a matriz de covariância e o R_f, não ficam guardados no banco: eles são recalculados a cada execução a partir da tabela `retornos` e vivem só em memória. Guardar esses valores criaria o risco clássico de dado velho, em que alguém reingere a base, esquece de recalibrar, e o modelo passa a rodar com uma média que não corresponde mais aos dados, sem erro nenhum aparecer. Como calcular média e covariância sobre mil linhas é instantâneo, não compensa correr esse risco.
 
 O formato da coluna `data` muda junto com a frequência da ingestão: fica `AAAA-MM` no mensal, que é o padrão, e `AAAA-MM-DD` no diário. As duas frequências ficam em bancos separados, e nunca na mesma tabela.
 
