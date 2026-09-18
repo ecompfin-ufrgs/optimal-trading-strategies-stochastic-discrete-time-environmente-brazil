@@ -86,7 +86,7 @@ data,ibov,cdi
 - Os valores ficam sempre em decimal, nunca em porcentagem.
 - A tabela `retornos` só tem as datas que aparecem nas duas tabelas brutas ao mesmo tempo, isto é, a interseção entre `ibovespa` e `cdi`. Assim o alinhamento não fica com buracos.
 
-As quatro primeiras dessas regras ficam declaradas no próprio banco, no dicionário `ESQUEMAS` do `app.dal`, e não apenas no código que baixa os dados. É a `gravar_sqlite` que cria as tabelas a partir dele:
+As três primeiras dessas regras ficam declaradas no próprio banco, no dicionário `ESQUEMAS` do `app.dal`, e não apenas no código que baixa os dados. É a `gravar_sqlite` que cria as tabelas a partir dele:
 
 ```sql
 CREATE TABLE ibovespa (
@@ -103,6 +103,8 @@ CREATE TABLE retornos (
   cdi  REAL NOT NULL
 );
 ```
+
+As duas últimas regras não cabem num `CHECK`: a do decimal é uma convenção de unidade, que nenhuma restrição de coluna distingue de uma porcentagem, e a da interseção fala da relação entre três tabelas ao mesmo tempo. Quem garante a segunda é o `merge(..., how="inner")` da ingestão.
 
 O `CHECK` no comprimento da data é o que separa os dois formatos aceitos: `AAAA-MM` tem sete caracteres e `AAAA-MM-DD` tem dez. Com as regras declaradas no banco, uma data repetida ou uma célula vazia param a ingestão com `IntegrityError` logo na gravação, antes de chegarem à calibração. A validação de domínio da `RendaFixa`, mais adiante, segue a mesma ideia.
 
@@ -141,7 +143,7 @@ O requisito NF5 pede também a separação de paradigmas, que ficou assim:
 ### Figura: esteira do pipeline
 
 ```
-[ SQLite / CSV ]
+[ SQLite ]
       |  precos
       v
 +-----------------------------+
@@ -160,10 +162,10 @@ O requisito NF5 pede também a separação de paradigmas, que ficou assim:
       v
 +-----------------------------+
 | Agente + Nucleo             |   (F5-F8, F11)
-| Investidor; alpha*, A_t,     |
+| Investidor; alpha*, A_t,    |
 | theta_t                     |
 +-----------------------------+
-      |  politica otima (alfa*, theta_t)
+      |  politica otima (alpha*, theta_t)
       v
 +-----------------------------+
 | Simulacao forward           |   (F9, F10)
@@ -265,7 +267,7 @@ class RendaVariavel:
         """Gera n cenários de retorno R normalmente distribuido para o Monte Carlo."""
 ```
 
-O `periodos_por_ano` da `RendaFixa` é o que faz a conversão de ano para período, e a conversão é composta: `R_f = (1 + cdi_anual)^(1/periodos_por_ano) - 1`. Dizer só "CDI de 13%" não basta, porque o mesmo número vira `0.000489` por pregão ou `0.01024` por mês.
+O `periodos_por_ano` da `RendaFixa` é o que faz a conversão de ano para período, e a conversão é composta: `R_f = (1 + cdi_anual)^(1/periodos_por_ano) - 1`. Dizer só "CDI de 13%" não basta, porque o mesmo número vira `0.000485` por pregão ou `0.01024` por mês.
 
 A classe valida as duas entradas no construtor, como as outras entidades do projeto fazem com as suas: o `cdi_anual` tem que ser maior que -1 e o `periodos_por_ano`, pelo menos 1. O motivo é que a conversão eleva `(1 + cdi_anual)` a um expoente fracionário, e com a base negativa o resultado sai **complexo**. Isso não interrompe a execução: o numpy descarta a parte imaginária mais adiante, o R_f fica errado e a esteira devolve um alpha\* de aparência normal. Por isso a checagem fica logo na entrada.
 
@@ -350,7 +352,7 @@ def executar_pipeline(config: dict) -> dict:
 
 Além do `n_scenarios`, dois outros controles da simulação têm valor padrão: o `n_paths`, que é o número de trajetórias da simulação para a frente, vale 5000 na esteira e 3000 na linha de comando, e a `seed`, que vale 42. A semente vale para os dois sorteios, mas com valores diferentes: os cenários que resolvem o alpha usam `seed` e os caminhos da simulação usam `seed + 1`, para que a política ótima não seja conferida nos mesmos números que a produziram. Mesma semente e mesmos dados dão sempre o mesmo resultado, que é o que o NF4 pede.
 
-O resultado traz também o `consumo_por_ano`, com o consumo médio já somado dentro de cada ano do horizonte. A soma fica na esteira, e não em quem exibe, para que a linha de comando e a figura leiam o mesmo número. O consumo terminal `c_T` fica fora dela: ele é a liquidação de toda a riqueza que sobrou (Phi_T = 1), e não um fluxo anual comparável com os outros. Quando o horizonte não fecha um número inteiro de anos, o último balde sai parcial.
+O resultado traz também o `consumo_por_ano`, com o consumo médio já somado dentro de cada ano do horizonte. A soma fica na esteira, e não em quem exibe, para que a linha de comando e a figura leiam o mesmo número. O consumo terminal `c_T` fica fora dela: ele é a liquidação de toda a riqueza que sobrou (theta_T = 1), e não um fluxo anual comparável com os outros. Quando o horizonte não fecha um número inteiro de anos, o último balde sai parcial.
 
 O número de cenários (`n_scenarios`) precisa de atenção, porque depende da frequência dos dados. Quando ele não vem no config, o padrão sai da própria frequência: 200 mil para séries mensais e 4 milhões para séries diárias. A base diária precisa de muito mais porque o excesso de retorno de um pregão é pequeno perto do seu desvio-padrão, e com poucos cenários o alpha* oscila bastante de uma rodada para outra. O `app.__main__` usa esses mesmos valores.
 
@@ -378,7 +380,9 @@ A quebra em duas linhas tem um motivo prático. Em uma linha só o texto passava
 
 Marcar se a base é real ou sintética importa porque a série de demonstração usa datas plausíveis; sem essa marca, uma figura gerada sem banco ficaria indistinguível de uma gerada com dados do Yahoo e do Banco Central. Só que o rodapé sozinho não basta: como o nome do arquivo é o mesmo nos dois casos, uma rodada sem banco sobrescreveria as figuras de dados reais que o texto referencia. Por isso o destino também muda, com as figuras de dados reais indo para `results/` e as da base sintética para `results/sinteticos/`. Guardar a procedência num arquivo de metadados separado seria outra saída, mas aí seria fácil o arquivo ficar para trás; com a legenda na própria imagem, ela acompanha a figura quando vai para dentro do documento. As figuras ficam versionadas no repositório, porque o texto se refere a elas.
 
-Dois desses gráficos refazem a otimização e por isso custam tempo: o G(alpha) avalia a condição de primeira ordem em 60 pontos e o alpha contra gamma refaz a otimização em 8 valores. Sobre os 4 milhões de cenários da base diária isso dá cerca de 32 segundos, contra os 6 segundos da esteira inteira sem figuras; na base mensal, com 200 mil cenários, o custo é uma fração disso. É essa a etapa mais cara da aplicação, e é ela que fixa o limite de 40 segundos do NF1. Já o gráfico do alpha contra T sai de graça, porque o alpha não depende de T, e é esse achatamento que ele serve para mostrar. A reta é desenhada a partir do alpha único, e não de uma otimização por horizonte: a verificação numérica da miopia (F12) é a do notebook de teste, e a figura só ilustra o resultado.
+Dois desses gráficos refazem a otimização e por isso custam tempo: o G(alpha) avalia a condição de primeira ordem em 60 pontos e o alpha contra gamma refaz a otimização em 8 valores. Sobre os 4 milhões de cenários da base diária o primeiro leva uns 13 segundos e o segundo uns 21; com a renderização dos seis PNGs por cima, a `gerar` fecha em torno de 42 segundos. A esteira inteira, sem figuras, roda em 4,5 segundos sobre a mesma base, e `python -m app --diario --graficos` leva uns 48 segundos de ponta a ponta. Na base mensal, com 200 mil cenários, o custo é uma fração disso.
+
+Esta é, de longe, a etapa mais cara da aplicação, e é por isso que ela fica fora do limite do NF1: os 60 segundos de lá valem para os algoritmos do modelo, e desenhar um gráfico não é um deles. Quem precisar apertar esse tempo tem por onde: as duas figuras caras não precisam dos 4 milhões de cenários que a estimativa do alpha pede, e um teto de algumas centenas de milhares mudaria a curva só na terceira ou quarta casa decimal. Já o gráfico do alpha contra T sai de graça, porque o alpha não depende de T, e é esse achatamento que ele serve para mostrar. A reta é desenhada a partir do alpha único, e não de uma otimização por horizonte: a verificação numérica da miopia (F12) é a do notebook de teste, e a figura só ilustra o resultado.
 
 ---
 
