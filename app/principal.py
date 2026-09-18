@@ -1,13 +1,13 @@
-"""app.principal — orquestrador da esteira pipes-and-filters.
+"""app.principal: liga as etapas da esteira na ordem.
 
-Liga os filtros na ordem da esteira (F10, NF5):
+A ordem e esta (F10, NF5):
 
-    dal → mercado → agente (+ nucleo) → simulação → resultado
+    dal -> mercado -> agente (+ nucleo) -> simulacao -> resultado
 
-executar_pipeline é o único ponto de entrada da esteira: recebe um config e
-devolve o resultado pronto (carteira ótima, consumo, trajetórias). Foi feito
-assim para que outra interface possa ser ligada depois sem mexer no núcleo.
-Toda a lógica vive nos módulos; aqui só há orquestração.
+O executar_pipeline e a unica porta de entrada da esteira: recebe um config e
+devolve o resultado pronto, com a carteira otima, o consumo e as trajetorias.
+Ficou assim para que desse para ligar outra interface depois sem mexer nos
+modulos de calculo. Aqui nao tem conta nenhuma, so a ligacao entre as etapas.
 """
 
 import numpy as np
@@ -16,28 +16,25 @@ from app import dal, nucleo
 from app.agente import Investidor
 from app.mercado import RendaFixa, RendaVariavel
 
-# Fator de desconto **anual** padrão.
-# Fica declarado ao ano de proposito: falar "beta = 0.96" sozinho nao diz a que
-# periodo se refere, e se alguem entender isso como valor por pregao vira
-# 0.96 elevado a 252, ou seja quase zero, e o investidor consumiria quase tudo
-# no primeiro ano.
+# Fator de desconto ANUAL padrao.
+# Fica declarado ao ano porque "beta = 0.96" sozinho nao diz a que periodo se
+# refere. Lido como valor por pregao, vira 0.96 elevado a 252, quase zero, e o
+# investidor consumiria quase tudo no primeiro ano.
 BETA_ANUAL_PADRAO = 0.96
 
 
 def _n_scenarios_padrao(periodos_por_ano: int) -> int:
-    """Cenários de Monte Carlo adequados à frequência dos dados.
+    """Cenarios de Monte Carlo adequados a frequencia dos dados.
 
-    A base diária precisa de muito mais: o excesso de retorno de um pregão é
-    pequeno perto do seu desvio-padrão, e com poucos cenários o α* oscila de
-    uma rodada para a outra.
+    A base diaria precisa de muito mais, porque o excesso de retorno de um
+    pregao e pequeno perto do desvio-padrao dele e com poucos cenarios o
+    alpha* oscila de uma rodada pra outra.
     """
     return 200_000 if periodos_por_ano <= 12 else 4_000_000
 
 
 def _consumo_por_ano(c_medio: np.ndarray, periodos_por_ano: int, T: int) -> np.ndarray:
-    """Soma o consumo médio dentro de cada ano do horizonte.
-
-    """
+    """Soma o consumo medio dentro de cada ano do horizonte."""
     n_anos = max(1, int(np.ceil(T / periodos_por_ano)))
     fluxo = np.asarray(c_medio, dtype=float)[:T]
     return np.array([fluxo[i * periodos_por_ano:(i + 1) * periodos_por_ano].sum()
@@ -50,19 +47,20 @@ def executar_pipeline(config: dict) -> dict:
     O que pode vir no config:
 
     periodos_por_ano: 12 se a base for mensal, 252 se for diaria. E
-        obrigatorio, nao tem valor padrao, pelo motivo explicado abaixo.
+        obrigatorio: sem ele nao da pra converter o cdi_anual nem o
+        beta_anual, que sao declarados ao ano.
     retornos ou db_path: ou o DataFrame ja pronto, com a coluna data mais uma
         coluna por ativo, ou o caminho do banco pra ler do SQLite (nesse caso
         da pra passar tambem tabela, que por padrao e 'retornos').
-    ativos: quais colunas sao de risco. Por padrao, todas menos data e a
+    ativos: quais colunas sao de risco. Por padrao, todas menos a data e a
         coluna do rf.
     rf_col: nome da coluna da taxa livre de risco nos dados, por padrao 'cdi'.
     cdi_anual: o CDI ao ano, convertido pro periodo aqui dentro. Se nao vier,
         usa a media da coluna do rf, que o dal ja grava por periodo.
     gamma (5.0), w0 (1.0) e horizonte, que e o T em periodos e tambem e
         obrigatorio.
-    beta_anual (0.96, convertido pro periodo) ou beta, se voce ja tiver o valor
-        por periodo. Passar os dois da erro.
+    beta_anual (0.96, convertido pro periodo) ou beta, pra quem ja tiver o
+        valor por periodo. Passar os dois da erro.
     n_scenarios (200 mil no mensal, 4 milhoes no diario), n_paths (5000, mas a
         linha de comando pede 3000) e seed (42).
 
@@ -72,7 +70,7 @@ def executar_pipeline(config: dict) -> dict:
     resumo da simulacao, com E_W_T, os percentis de W_T e as trajetorias
     trajetoria_W_media, _mediana, _p5, _p95 e trajetoria_c_media, mais o
     consumo_por_ano ja somado dentro de cada ano. Vem tambem o periodos_por_ano
-    e o beta ja convertido, pra quem for exibir os numeros nao ter que refazer
+    e o beta ja convertido, pra quem for exibir os numeros nao precisar refazer
     a conta.
     """
     cfg = dict(config)
@@ -119,7 +117,7 @@ def executar_pipeline(config: dict) -> dict:
             "padrao porque 60 periodos e 5 anos no mensal e uns 3 meses no diario."
         )
     if "beta" in cfg and "beta_anual" in cfg:
-        raise ValueError("use 'beta' (por período) OU 'beta_anual', não os dois.")
+        raise ValueError("use 'beta' (por periodo) OU 'beta_anual', nao os dois.")
     beta = (float(cfg["beta"]) if "beta" in cfg
             else float(cfg.get("beta_anual", BETA_ANUAL_PADRAO)) ** (1.0 / ppa))
     inv = Investidor(cfg.get("gamma", 5.0), beta,
