@@ -49,20 +49,24 @@ def montar_rodape(res: dict, cfg: dict, periodo: tuple[str, str], n_obs: int,
     rf_anual = (1.0 + res["rf"]) ** cfg["periodos_por_ano"] - 1.0
     origem_rf = "informado" if cfg.get("cdi_anual") is not None else "série CDI"
     fonte = "dados reais" if dados_reais else "dados SINTÉTICOS"
+    cenarios = f"{cfg['n_scenarios']:,}".replace(",", ".")
+    trajetorias = f"{cfg['n_paths']:,}".replace(",", ".")
     return (f"Ibovespa {unidade} ({fonte}) · {periodo[0]} a {periodo[1]} "
             f"({n_obs} obs) · R_f={rf_anual:.2%} a.a. ({origem_rf})\n"
             f"γ={cfg['gamma']:g} · β={beta_anual:g} a.a. · T={anos:g} anos · "
-            f"W₀={cfg['w0']:g} · {cfg['n_scenarios']:,} cenários · "
-            f"{cfg['n_paths']:,} trajetórias · seed {cfg['seed']} · "
-            f"α*={res['alpha_star'][0]:.4f}".replace(",", "."))
+            f"W₀={cfg['w0']:g} · {cenarios} cenários · "
+            f"{trajetorias} trajetórias · seed {cfg['seed']} · "
+            f"α*={res['alpha_star'][0]:.4f}")
 
 
 def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
-          periodos_por_ano: int, destino: str = DESTINO_PADRAO) -> list[str]:
+          destino: str = DESTINO_PADRAO) -> list[str]:
     """Faz as seis figuras e devolve os caminhos dos arquivos escritos.
 
     O res e o que o executar_pipeline devolveu. O mercado e o rf so sao
-    necessarios para os dois graficos que refazem a otimizacao.
+    necessarios para os dois graficos que refazem a otimizacao; o consumo
+    somado por ano ja vem pronto em res["consumo_por_ano"], para a figura e
+    a linha de comando nao fazerem a mesma conta cada uma do seu jeito.
     """
     os.makedirs(destino, exist_ok=True)
     g = float(cfg["gamma"])
@@ -132,13 +136,10 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
     ax2.set_ylabel("P95-P5\n(% da média)", fontsize=8)
     escritos.append(_salvar(fig, destino, "riqueza_W_t.png", rodape))
 
-    # 6. consumo somado por ano
-    c = res["trajetoria_c_media"]
-    n_anos = max(1, T // periodos_por_ano)
-    por_ano = [c[i * periodos_por_ano:(i + 1) * periodos_por_ano].sum()
-               for i in range(n_anos)]
+    # 6. consumo somado por ano (sem o c_T, que e a liquidacao terminal)
+    por_ano = res["consumo_por_ano"]
     fig, ax = plt.subplots(figsize=(7, 4))
-    ax.bar(np.arange(1, n_anos + 1), por_ano, color="#ff7f0e")
+    ax.bar(np.arange(1, len(por_ano) + 1), por_ano, color="#ff7f0e")
     ax.set_xlabel("ano"); ax.set_ylabel(r"consumo (fração de $W_0$)")
     ax.set_title("Consumo agregado por ano")
     escritos.append(_salvar(fig, destino, "consumo_por_ano.png", rodape))
