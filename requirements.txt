@@ -1,4 +1,5 @@
 # Bibliotecas usadas no projeto (modelo de Samuelson, 1969).
+#   pip install -r requirements.txt
 
 numpy==2.2.6
 pandas==2.2.3
