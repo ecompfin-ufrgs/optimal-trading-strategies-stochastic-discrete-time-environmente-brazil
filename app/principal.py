@@ -26,9 +26,22 @@ BETA_ANUAL_PADRAO = 0.96
 
 def _n_scenarios_padrao(periodos_por_ano: int) -> int:
     """Cenários de Monte Carlo adequados à frequência dos dados.
+
+    A base diária precisa de muito mais: o excesso de retorno de um pregão é
+    pequeno perto do seu desvio-padrão, e com poucos cenários o α* oscila de
+    uma rodada para a outra.
     """
-    
     return 200_000 if periodos_por_ano <= 12 else 4_000_000
+
+
+def _consumo_por_ano(c_medio: np.ndarray, periodos_por_ano: int, T: int) -> np.ndarray:
+    """Soma o consumo médio dentro de cada ano do horizonte.
+
+    """
+    n_anos = max(1, int(np.ceil(T / periodos_por_ano)))
+    fluxo = np.asarray(c_medio, dtype=float)[:T]
+    return np.array([fluxo[i * periodos_por_ano:(i + 1) * periodos_por_ano].sum()
+                     for i in range(n_anos)])
 
 
 def executar_pipeline(config: dict) -> dict:
@@ -50,24 +63,17 @@ def executar_pipeline(config: dict) -> dict:
         obrigatorio.
     beta_anual (0.96, convertido pro periodo) ou beta, se voce ja tiver o valor
         por periodo. Passar os dois da erro.
-    n_scenarios (200 mil no mensal, 4 milhoes no diario), n_paths (5000) e
-        seed (42).
-
-    Os retornos sao sempre normais e a carteira e sempre livre, podendo ficar
-    negativa ou passar de 1, como no artigo (secao 3.1).
-
-    Por que o periodos_por_ano nao tem padrao: a media, a covariancia e o rf
-    lido da tabela ja saem na frequencia dos dados, mas o cdi_anual e o
-    beta_anual sao declarados ao ano, e o numero de cenarios tambem depende da
-    frequencia. Nenhum dos tres consegue adivinhar sozinho.
+    n_scenarios (200 mil no mensal, 4 milhoes no diario), n_paths (5000, mas a
+        linha de comando pede 3000) e seed (42).
 
     O que volta: um dicionario com alpha_star (a carteira otima), theta e
     consumo_inicial, phi_hat, A_t (Etapa 3) e valor_V (Etapa 7, a funcao valor
     na riqueza inicial, que e o F11), a calibracao (mu_hat, sigma_hat e rf) e o
     resumo da simulacao, com E_W_T, os percentis de W_T e as trajetorias
-    trajetoria_W_media, _mediana, _p5, _p95 e trajetoria_c_media. Vem tambem o
-    periodos_por_ano e o beta ja convertido, pra quem for exibir os numeros nao
-    ter que refazer a conta.
+    trajetoria_W_media, _mediana, _p5, _p95 e trajetoria_c_media, mais o
+    consumo_por_ano ja somado dentro de cada ano. Vem tambem o periodos_por_ano
+    e o beta ja convertido, pra quem for exibir os numeros nao ter que refazer
+    a conta.
     """
     cfg = dict(config)
     coluna_data = cfg.get("coluna_data", "data")
@@ -142,9 +148,9 @@ def executar_pipeline(config: dict) -> dict:
         "beta": beta,
         "mu_hat": mercado.media(),
         "sigma_hat": mercado.covariancia(),
-        "alpha_star": alpha,                              # carteira ótima
+        "alpha_star": alpha,
         "phi_hat": inv.phi_hat,
-        "theta": theta,                                   # frações de consumo
+        "theta": theta,
         "consumo_inicial": float(theta[0] * inv.w0),
         "horizonte": T,
         "E_W_T": float(W_T.mean()),
@@ -157,4 +163,5 @@ def executar_pipeline(config: dict) -> dict:
         "trajetoria_W_p5": W_p5,
         "trajetoria_W_p95": W_p95,
         "trajetoria_c_media": sim["c"].mean(axis=0),
+        "consumo_por_ano": _consumo_por_ano(sim["c"].mean(axis=0), ppa, T),
     }
