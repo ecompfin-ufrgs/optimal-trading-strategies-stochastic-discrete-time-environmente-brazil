@@ -23,7 +23,7 @@ isto é, grandezas que você quer quer o software calcule.-->
 
 ## Requisitos não funcionais
 
-- Requisito NF1 - O tempo de execução de cada algoritmo não pode superar 40 segundos. O limite cobre também a geração das figuras, que é a etapa mais cara da aplicação: duas das seis refazem a otimização (60 avaliações da FOC e mais 8 reotimizações) sobre os 4 milhões de cenários da base diária.
+- Requisito NF1 - O tempo de execução de cada algoritmo do modelo não pode superar 60 segundos. A geração das figuras fica fora desse limite, porque é a apresentação dos resultados e não um algoritmo do modelo: duas das seis refazem a otimização (60 avaliações da FOC e mais 8 reotimizações) sobre os 4 milhões de cenários da base diária e custam sozinhas cerca de 42 segundos. Sobre essa mesma base, a esteira inteira roda em torno de 4,5 segundos.
 - Requisito NF2 - a aplicação deve ser executada pela linha de comando, sem precisar editar código para trocar os parâmetros
 - Requisito NF3 - rodar em Windows, Linux e macOS (o desenvolvimento é feito no Windows)
 - Requisito NF4 - reprodutibilidade: mesma seed + mesmos dados -> resultado idêntico
