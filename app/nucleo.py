@@ -1,10 +1,11 @@
 """app.nucleo: as contas do modelo de Samuelson (1969).
 
-Aqui nao tem estado nenhum. Cada funcao e uma equacao do artigo e da pra
-testar sozinha (F6 a F11). E a parte "funcional" da separacao pedida no NF5.
+Cada funcao aqui e uma equacao do artigo e nao guarda nada de uma chamada
+para a outra, entao da pra testar uma de cada vez (F6 a F11). E o lado de
+calculo da divisao que o NF5 pede.
 
-Uma convencao importante: R e rf sao fatores de retorno BRUTO (1.02, 1.008),
-e nao a variacao. Assim o retorno bruto da carteira fica
+Uma convencao importante: R e rf sao fatores de retorno BRUTO (1.02, 1.008) e
+nao a variacao. O retorno bruto da carteira fica
 
     R_p = rf + alpha * (R - rf)        e o excesso e (R - rf).
 
@@ -16,18 +17,18 @@ estas funcoes.
 import numpy as np
 from scipy import optimize
 
-# piso de seguranca pro R_p, pra ele nunca ficar zero ou negativo na potencia
+# piso do R_p, pra ele nunca ficar zero ou negativo dentro da potencia
 _TOL_FALENCIA = 1e-12
 
-# intervalo onde o brentq comeca procurando a raiz (caso de 1 ativo so).
-# Com dados mensais o alpha fica bem longe de 20, mas se G nao trocar de sinal
-# dentro do intervalo ele vai sendo dobrado ate 8 vezes.
-_BRACKET_INICIAL = 20.0
+# intervalo onde o brentq comeca a procurar a raiz (caso de 1 ativo so).
+# Com dados mensais o alpha fica bem longe de 20; se o G nao trocar de sinal
+# dentro do intervalo, ele dobra ate 8 vezes.
+_INTERVALO_INICIAL = 20.0
 _MAX_EXPANSOES = 8
 
 
 def funcao_foc(alpha, R, rf, gamma):
-    """G(alpha) = E[(R − rf*1) / R_p^gamma], com R_p = rf + alpha^T(R − rf*1). Shape (N,). (F6)"""
+    """G(alpha) = E[(R - rf*1) / R_p^gamma], com R_p = rf + alpha^T(R - rf*1). Um valor por ativo. (F6)"""
     alpha = np.asarray(alpha, dtype=float)
     excesso = R - rf                                    # (n, N)
     R_p = np.maximum(rf + excesso @ alpha, _TOL_FALENCIA)  # (n,)
@@ -36,7 +37,7 @@ def funcao_foc(alpha, R, rf, gamma):
 
 
 def _objetivo_J(alpha, R, rf, gamma):
-    """J(alpha) = E[u(R_p)]. E esta funcao que o solver maximiza; a derivada dela e o G."""
+    """J(alpha) = E[u(R_p)]. E esta a funcao que o otimizador maximiza; a derivada dela e o G."""
     excesso = R - rf
     R_p = np.maximum(rf + excesso @ alpha, _TOL_FALENCIA)
     if np.isclose(gamma, 1.0):
@@ -53,8 +54,7 @@ def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
     (venda a descoberto) e pode passar de 1 (alavancagem), sem limite.
     Com 2 ativos ou mais usa o SLSQP; com 1 ativo so usa o brentq.
 
-    Os dois caminhos levantam RuntimeError quando nao ha solucao: um alpha
-    errado com cara de certo atravessaria a esteira inteira sem dar sinal.
+    Quando nao existe solucao, os dois caminhos levantam RuntimeError.
     """
     R = np.asarray(R, dtype=float)
     N = R.shape[1]
@@ -70,28 +70,27 @@ def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
         if not res.success:
             raise RuntimeError(
                 f"SLSQP nao convergiu em {N} ativos: {res.message} "
-                f"(nit={res.nit}). Tente outro alpha0, mais iteracoes (maxiter) "
-                "ou confira se a amostra de R tem cenarios acima e abaixo de rf."
+                f"(nit={res.nit}). Tente outro alpha0 ou mais iteracoes."
             )
         return res.x.copy()
 
     # caso de 1 ativo, com brentq. O G so cai, entao procuro G(lo) > 0 > G(hi).
     g = lambda a: float(funcao_foc(np.array([a]), R, rf, gamma)[0])
-    lo = -_BRACKET_INICIAL
-    hi = _BRACKET_INICIAL
+    lo = -_INTERVALO_INICIAL
+    hi = _INTERVALO_INICIAL
     for _ in range(_MAX_EXPANSOES):
         if g(lo) > 0 > g(hi):
             return np.array([optimize.brentq(g, lo, hi, xtol=tol)])
         lo *= 2.0
         hi *= 2.0
     raise RuntimeError(
-        f"FOC sem troca de sinal em alpha elemento de [{lo / 2:.0f}, {hi / 2:.0f}]: não há alpha* "
-        "finito. Verifique se a amostra de R contém cenários acima e abaixo de rf."
+        f"FOC sem troca de sinal com alpha em [{lo / 2:.0f}, {hi / 2:.0f}]: nao existe "
+        "alpha* finito. Confira se a amostra de R tem cenarios acima e abaixo de rf."
     )
 
 
 def phi_chapeu(alpha, R, rf, gamma):
-    """Phi_chapeu = E[R_p^(1−gamma)] do portfólio ótimo (ou E[ln R_p] se gamma=1). (F7)"""
+    """Phi_chapeu = E[R_p^(1-gamma)] da carteira otima (ou E[ln R_p] se gamma=1). (F7)"""
     alpha = np.asarray(alpha, dtype=float)
     excesso = R - rf
     R_p = np.maximum(rf + excesso @ alpha, _TOL_FALENCIA)
@@ -101,7 +100,7 @@ def phi_chapeu(alpha, R, rf, gamma):
 
 
 def recorrencia_A(phi, beta, gamma, T):
-    """A_T=1; A_t=[1 + (beta*A_{t+1}*Phi_chapeu)^(1/gamma)]^gamma, t=T−1..0. Shape (T+1,). (F8)"""
+    """A_T=1; A_t=[1 + (beta*A_{t+1}*Phi_chapeu)^(1/gamma)]^gamma, t=T-1..0. Sao T+1 valores. (F8)"""
     A = np.empty(T + 1)
     if np.isclose(gamma, 1.0):
         # caso gamma=1 (utilidade log): A_t = (1-beta^(T-t+1))/(1-beta), nao usa o phi
@@ -117,7 +116,7 @@ def recorrencia_A(phi, beta, gamma, T):
 
 
 def fracoes_consumo(A, gamma):
-    """theta_t = A_t^(−1/gamma) (ou 1/A_t se gamma=1). (F8)"""
+    """theta_t = A_t^(-1/gamma) (ou 1/A_t se gamma=1). (F8)"""
     A = np.asarray(A, dtype=float)
     if np.isclose(gamma, 1.0):
         return 1.0 / A
@@ -125,7 +124,7 @@ def fracoes_consumo(A, gamma):
 
 
 def funcao_valor(A, W, gamma):
-    """V_t(W) = A_t·W^(1−gamma)/(1−gamma) (gamma diferente de 1) ou A_t*ln(W) (gamma=1). (F11)"""
+    """V_t(W) = A_t*W^(1-gamma)/(1-gamma) (gamma diferente de 1) ou A_t*ln(W) (gamma=1). (F11)"""
     A = np.asarray(A, dtype=float)
     if np.isclose(gamma, 1.0):
         return A * np.log(W)
@@ -157,7 +156,7 @@ def propagar_riqueza(w0, theta, alpha, R, rf):
         S[:, t] = W[:, t] - c[:, t]
         R_p = rf + (R[:, t, :] - rf) @ alpha
         W[:, t + 1] = S[:, t] * R_p
-    # Condição terminal: consome toda a riqueza (theta_T = 1).
+    # Condicao terminal: consome toda a riqueza (theta_T = 1).
     c[:, T] = theta[T] * W[:, T]
     S[:, T] = W[:, T] - c[:, T]
     return {"W": W, "c": c, "S": S}
