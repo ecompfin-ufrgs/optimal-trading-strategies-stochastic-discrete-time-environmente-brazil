@@ -12,7 +12,7 @@ import pandas as pd
 
 
 class RendaFixa:
-    """Mercado de renda fixa (CDI) — fornece a taxa livre de risco. (F3)"""
+    """Mercado de renda fixa (CDI): fornece a taxa livre de risco. (F3)"""
 
     def __init__(self, cdi_anual: float, periodos_por_ano: int = 12) -> None:
         """
@@ -26,9 +26,9 @@ class RendaFixa:
         periodos_por_ano = int(periodos_por_ano)
         if cdi_anual <= -1.0:
             raise ValueError(
-                f"cdi_anual deve ser > -1; veio {cdi_anual:g}. A conversão "
+                f"cdi_anual deve ser > -1; veio {cdi_anual:g}. A conversao "
                 "eleva (1 + cdi_anual) a 1/periodos_por_ano, e com a base "
-                "negativa o resultado sai complexo. "
+                "negativa o resultado sai complexo."
             )
         if periodos_por_ano < 1:
             raise ValueError(
@@ -40,7 +40,7 @@ class RendaFixa:
     def retorno_livre_risco(self) -> float:
         """A taxa livre de risco de um periodo, liquida. (F3)
 
-        A conversao de ano pra periodo e composta, e nao dividindo por 12:
+        A conversao de ano pra periodo e composta (nao e dividir por 12):
 
             R_f = (1 + cdi_anual) ** (1 / periodos_por_ano) - 1
 
@@ -68,35 +68,34 @@ class RendaVariavel:
         if df.shape[1] == 0:
             raise ValueError("retornos deve conter ao menos uma coluna de ativo.")
         if df.shape[0] < 2:
-            raise ValueError("são necessárias ao menos 2 observações de retorno.")
+            raise ValueError("sao necessarias ao menos 2 observacoes de retorno.")
         nao_numericas = [c for c in df.columns
                          if not pd.api.types.is_numeric_dtype(df[c])]
         if nao_numericas:
             raise ValueError(
-                f"colunas não numéricas em retornos: {nao_numericas}. "
-                f"Informe o nome da coluna de data em coluna_data (veio "
-                f"{coluna_data!r}) ou remova essas colunas."
+                f"colunas nao numericas em retornos: {nao_numericas}. Informe "
+                f"o nome da coluna de data em coluna_data (veio {coluna_data!r})."
             )
 
         self.ativos: list[str] = list(df.columns)
         self._R: np.ndarray = df.to_numpy(dtype=np.float64)  # (T, N)
 
         if np.isnan(self._R).any():
-            raise ValueError("retornos não pode conter NaN.")
+            raise ValueError("retornos nao pode conter NaN.")
 
     @property
     def n_ativos(self) -> int:
         return self._R.shape[1]
 
     def media(self) -> np.ndarray:
-        """Vetor de retornos esperados estimado mu_chapeu, shape (N,). (F2, F4)"""
+        """Vetor de retornos esperados estimado mu_chapeu, um por ativo. (F2, F4)"""
         return self._R.mean(axis=0)
 
     def covariancia(self) -> np.ndarray:
         """A matriz de covariancia amostral, com ddof=1. (F2, F4)
 
-        E o np.cov mesmo, com atleast_2d por cima pra garantir que o resultado
-        seja bidimensional quando tem um ativo so.
+        E o np.cov mesmo; o atleast_2d forca o resultado a sair como matriz
+        tambem quando tem um ativo so.
         """
         return np.atleast_2d(np.cov(self._R.T, ddof=1))
 
@@ -110,7 +109,7 @@ class RendaVariavel:
         """
         rng = np.random.default_rng(seed)
         mu = self.media()
-        # R = media + z * chol.T, com z normal padrao. Assim a covariancia sai certa.
+        # R = media + z * chol.T, com z normal padrao, pra covariancia sair certa.
         chol = np.linalg.cholesky(self.covariancia())
         z = rng.standard_normal((n, mu.shape[0]))
         return mu[None, :] + z @ chol.T
