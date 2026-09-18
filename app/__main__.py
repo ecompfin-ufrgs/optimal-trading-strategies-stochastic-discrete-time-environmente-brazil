@@ -4,15 +4,25 @@ Roda a esteira completa (``app.principal.executar_pipeline``) e imprime o
 resultado. Serve para conferir que a aplicação roda de ponta a ponta, e
 para experimentar parâmetros sem editar código:
 
-    python -m app                                   # base diária, defaults
+    python -m app                                   # base mensal, defaults
+    python -m app --diario                          # base diária (252 pregões)
     python -m app --anos 20 --beta-anual 0.90
-    python -m app --mensal --anos 10
     python -m app --cdi-anual 0.08                  # R_f hipotético, 8% a.a.
     python -m app --graficos                        # + figuras em results/
     python -m app --help                            # lista tudo
 
-Se o banco não existir, uma série sintética na frequência pedida mantém a
-demonstração offline e reprodutível.
+A frequência padrão é a mensal, a mesma da ingestão: ``python -m app.ingestao``
+enche ``data/mercado.db`` e ``python -m app`` lê de lá. Para a base diária são
+``python -m app.ingestao <inicio> --diario`` e ``python -m app --diario``.
+
+Se o banco da frequência pedida não existir, uma série sintética mantém a
+demonstração offline e reprodutível — e as figuras saem marcadas como
+sintéticas no rodapé, para não se confundirem com uma rodada real.
+
+Este módulo só lê parâmetros, escolhe a fonte de dados e formata a saída. As
+contas do modelo estão todas na esteira; a única exceção é a série sintética
+aqui embaixo, que existe para a demonstração funcionar sem rede e por isso
+acompanha a interface, e não a DAL.
 """
 
 import argparse
@@ -24,15 +34,16 @@ import pandas as pd
 
 from app.principal import executar_pipeline
 
-# Períodos por ano, banco e n_scenarios default de cada frequência.
+# Períodos por ano, banco, n_scenarios e a série sintética de cada frequência.
+# A mensal vem primeiro por ser o padrão.
 
 PERFIS = {
-    "1d":  {"periodos_por_ano": 252, "db": os.path.join("data", "mercado_diario.db"),
-            "n_scenarios": 4_000_000, "unidade": "pregao",
-            "mu": 0.0007, "sigma": 0.011, "cdi": 0.00049, "freq_pandas": "B"},
     "1mo": {"periodos_por_ano": 12,  "db": os.path.join("data", "mercado.db"),
             "n_scenarios": 200_000, "unidade": "mes",
             "mu": 0.015, "sigma": 0.06, "cdi": 0.008, "freq_pandas": "MS"},
+    "1d":  {"periodos_por_ano": 252, "db": os.path.join("data", "mercado_diario.db"),
+            "n_scenarios": 4_000_000, "unidade": "pregao",
+            "mu": 0.0007, "sigma": 0.011, "cdi": 0.00049, "freq_pandas": "B"},
 }
 
 BETA_ANUAL = 0.96
@@ -58,13 +69,20 @@ def _dados_demo(perfil: dict, n: int = 1_050, seed: int = 7) -> pd.DataFrame:
     })
 
 
+def _comando_ingestao(periodos_por_ano: int) -> str:
+    """A linha de ingestao que enche o banco da frequencia pedida."""
+    if periodos_por_ano == 252:
+        return "python -m app.ingestao 2022-05-22 --diario"
+    return "python -m app.ingestao"
+
+
 def _analisar(argv) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="python -m app",
         description="Roda a esteira de Samuelson (1969) sobre Ibovespa + CDI.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    p.add_argument("--mensal", action="store_true",
-                   help="usa a base mensal em vez da diária")
+    p.add_argument("--diario", action="store_true",
+                   help="usa a base diária (252 pregões) em vez da mensal")
     p.add_argument("--anos", type=float, default=ANOS,
                    help="horizonte de planejamento T, em anos")
     p.add_argument("--beta-anual", type=float, default=BETA_ANUAL,
@@ -78,7 +96,7 @@ def _analisar(argv) -> argparse.Namespace:
     p.add_argument("--w0", type=float, default=W0, help="riqueza inicial")
     p.add_argument("--n-scenarios", type=int, default=0,
                    help="cenarios de Monte Carlo; 0 = automatico por frequencia "
-                        "(4M diario, 200k mensal)")
+                        "(200k mensal, 4M diario)")
     p.add_argument("--n-paths", type=int, default=3_000,
                    help="trajetorias simuladas no forward pass")
     p.add_argument("--seed", type=int, default=1, help="semente (reprodutibilidade)")
@@ -88,13 +106,15 @@ def _analisar(argv) -> argparse.Namespace:
     if args.cdi_anual is not None and not -0.5 < args.cdi_anual < 1.0:
         p.error(f"--cdi-anual e em decimal e deve ficar entre -0.5 e 1.0; veio "
                 f"{args.cdi_anual:g}. Para 13% ao ano use 0.13, e nao 13.")
+    if args.anos <= 0:
+        p.error(f"--anos deve ser positivo; veio {args.anos:g}.")
     return args
 
 
 def main(argv=()) -> None:
-    """Executa a esteira. ``argv``."""
+    """Executa a esteira com os parametros de ``argv`` e imprime o resultado."""
     args = _analisar(list(argv))
-    perfil = PERFIS["1mo" if args.mensal else "1d"]
+    perfil = PERFIS["1d" if args.diario else "1mo"]
     ppa = perfil["periodos_por_ano"]
     unid = perfil["unidade"]
     T = int(round(ppa * args.anos))
@@ -114,34 +134,38 @@ def main(argv=()) -> None:
         print(f"(dados REAIS: {perfil['db']} - R_f vem {origem_rf})")
         config = {"db_path": perfil["db"], "tabela": "retornos", **comum}
     else:
-        alvo = "--diario" if ppa == 252 else ""
         print(f"(SEM banco real -> dados SINTETICOS de demonstracao; "
               f"R_f vem {origem_rf})")
-        print(f"  para baixar dados reais:  python -m app.ingestao 2022-05-22 {alvo}".rstrip())
+        print(f"  para baixar dados reais:  {_comando_ingestao(ppa)}")
         config = {"retornos": _dados_demo(perfil), **comum}
     res = executar_pipeline(config)
 
     rf_a = (1 + res["rf"]) ** ppa - 1
     mu_a = (1 + res["mu_hat"][0]) ** ppa - 1
 
-    print(f"=== Esteira DP-CRRA-IID (Samuelson 1969) — base {'mensal' if args.mensal else 'diaria'} ===")
-    print(f"Ativos de risco      : {res['ativos']}")
-    print(f"R_f ({unid})         : {res['rf']:.8f}   ({rf_a:.2%} a.a.)")
-    print(f"mu_hat ({unid})      : {res['mu_hat'][0]:.8f}   ({mu_a:.2%} a.a.)")
-    print(f"gamma                : {args.gamma}")
-    print(f"Carteira otima a*   : {np.round(res['alpha_star'], 4)}")
-    print(f"Phi_hat              : {res['phi_hat']:.6f}")
-    print(f"beta                 : {res['beta']:.6f} por {unid}  ({args.beta_anual:.4g} a.a.)")
-    print(f"theta_0 ({unid})     : {res['theta'][0]:.6f}")
-    print(f"theta_T (terminal)   : {res['theta'][-1]:.4f}")
+    def linha(rotulo: str, valor: str) -> None:
+        """Mantem a coluna dos valores alinhada, com 'mes' ou com 'pregao'."""
+        print(f"{rotulo:<22}: {valor}")
 
-    c = res["trajetoria_c_media"]
+    print(f"=== Esteira DP-CRRA-IID (Samuelson 1969) - base "
+          f"{'diaria' if args.diario else 'mensal'} ===")
+    linha("Ativos de risco", f"{res['ativos']}")
+    linha(f"R_f ({unid})", f"{res['rf']:.8f}   ({rf_a:.2%} a.a.)")
+    linha(f"mu_hat ({unid})", f"{res['mu_hat'][0]:.8f}   ({mu_a:.2%} a.a.)")
+    linha("gamma", f"{args.gamma}")
+    linha("Carteira otima a*", f"{np.round(res['alpha_star'], 4)}")
+    linha("Phi_hat", f"{res['phi_hat']:.6f}")
+    linha("beta", f"{res['beta']:.6f} por {unid}  ({args.beta_anual:.4g} a.a.)")
+    linha(f"theta_0 ({unid})", f"{res['theta'][0]:.6f}")
+    linha("theta_T (terminal)", f"{res['theta'][-1]:.4f}")
+
+    por_ano = res["consumo_por_ano"]
     print(f"Consumo por ano (frac. de W_0), horizonte de {args.anos:g} anos:")
-    for ano in range(int(args.anos)):
-        fatia = c[ano * ppa:(ano + 1) * ppa]
-        print(f"   ano {ano + 1}: {fatia.sum():.4f}")
-    print(f"E[W_T] (T={res['horizonte']})      : {res['E_W_T']:.6f}  "
-          f"[P5={res['W_T_p5']:.6f}, P95={res['W_T_p95']:.6f}]")
+    for i, total in enumerate(por_ano, start=1):
+        parcial = " (ano parcial)" if i == len(por_ano) and T % ppa else ""
+        print(f"   ano {i}: {total:.4f}{parcial}")
+    linha(f"E[W_T] (T={res['horizonte']})",
+          f"{res['E_W_T']:.6f}  [P5={res['W_T_p5']:.6f}, P95={res['W_T_p95']:.6f}]")
 
     if args.graficos:
         from app import graficos
@@ -155,10 +179,13 @@ def main(argv=()) -> None:
             res, comum, (ret["data"].iloc[0], ret["data"].iloc[-1]), len(ret),
             args.beta_anual, args.anos, "diario" if ppa == 252 else "mensal",
             dados_reais=dados_reais)
-        escritos = graficos.gerar(res, mercado, res["rf"], comum, rodape, ppa)
-        print(f"Figuras escritas em {graficos.DESTINO_PADRAO}/:")
-        for c in escritos:
-            print(f"   {os.path.basename(c)}")
+        destino = (graficos.DESTINO_PADRAO if dados_reais
+                   else os.path.join(graficos.DESTINO_PADRAO, "sinteticos"))
+        escritos = graficos.gerar(res, mercado, res["rf"], comum, rodape,
+                                  destino=destino)
+        print(f"Figuras escritas em {destino}/:")
+        for caminho in escritos:
+            print(f"   {os.path.basename(caminho)}")
 
 
 if __name__ == "__main__":
