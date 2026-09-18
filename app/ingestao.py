@@ -7,17 +7,17 @@ retornos alinhados por data e grava as tres tabelas do projeto num SQLite:
 
 Uso (linha de comando):
 
-    python -m app.ingestao                      # mensal, 2000-01-01 até hoje
-    python -m app.ingestao 2010-01-01           # início custom
+    python -m app.ingestao                      # mensal, 2000-01-01 ate hoje
+    python -m app.ingestao 2010-01-01           # inicio custom
     python -m app.ingestao 2010-01-01 2020-12-31
-    python -m app.ingestao 2022-05-22 --diario  # série diária
+    python -m app.ingestao 2022-05-22 --diario  # serie diaria
 
-No mensal a coluna data é AAAA-MM; no diário, AAAA-MM-DD. Cada
-frequência tem seu banco (data/mercado.db e data/mercado_diario.db),
-para que uma ingestão não sobrescreva a outra.
+No mensal a coluna data e AAAA-MM; no diario, AAAA-MM-DD. Cada frequencia tem
+o seu banco (data/mercado.db e data/mercado_diario.db), pra que uma ingestao
+nao sobrescreva a outra.
 
-Depois, cada frequência é lida pela execução correspondente: `python -m app`
-lê o banco mensal e `python -m app --diario` lê o diário.
+Cada frequencia e lida pela execucao correspondente: `python -m app` le o
+banco mensal e `python -m app --diario` le o diario.
 """
 
 import os
@@ -41,10 +41,10 @@ def montar_base(db_path: str | None = None, inicio: str = "2000-01-01",
     """
     if frequencia not in BANCO_PADRAO:
         raise ValueError(
-            f"frequência desconhecida: {frequencia!r} (use {sorted(BANCO_PADRAO)})."
+            f"frequencia desconhecida: {frequencia!r} (use {sorted(BANCO_PADRAO)})."
         )
     if fim is not None and fim < inicio:
-        raise ValueError(f"o início ({inicio}) vem depois do fim ({fim}).")
+        raise ValueError(f"o inicio ({inicio}) vem depois do fim ({fim}).")
     if db_path is None:
         db_path = BANCO_PADRAO[frequencia]
     os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
