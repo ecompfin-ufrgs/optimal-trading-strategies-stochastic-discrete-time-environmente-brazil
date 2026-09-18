@@ -1,28 +1,27 @@
 """Ponto de entrada do pacote: ``python -m app``.
 
 Roda a esteira completa (``app.principal.executar_pipeline``) e imprime o
-resultado. Serve para conferir que a aplicação roda de ponta a ponta, e
-para experimentar parâmetros sem editar código:
+resultado. Serve pra conferir que a aplicacao roda de ponta a ponta e pra
+experimentar parametros sem editar codigo:
 
     python -m app                                   # base mensal, defaults
-    python -m app --diario                          # base diária (252 pregões)
+    python -m app --diario                          # base diaria (252 pregoes)
     python -m app --anos 20 --beta-anual 0.90
-    python -m app --cdi-anual 0.08                  # R_f hipotético, 8% a.a.
+    python -m app --cdi-anual 0.08                  # R_f hipotetico, 8% a.a.
     python -m app --graficos                        # + figuras em results/
     python -m app --help                            # lista tudo
 
-A frequência padrão é a mensal, a mesma da ingestão: ``python -m app.ingestao``
-enche ``data/mercado.db`` e ``python -m app`` lê de lá. Para a base diária são
+A frequencia padrao e a mensal, a mesma da ingestao: ``python -m app.ingestao``
+enche ``data/mercado.db`` e ``python -m app`` le de la. Para a base diaria sao
 ``python -m app.ingestao <inicio> --diario`` e ``python -m app --diario``.
 
-Se o banco da frequência pedida não existir, uma série sintética mantém a
-demonstração offline e reprodutível — e as figuras saem marcadas como
-sintéticas no rodapé, para não se confundirem com uma rodada real.
+Se o banco da frequencia pedida nao existir, uma serie sintetica mantem a
+demonstracao rodando sem rede. As figuras dessa rodada saem marcadas como
+sinteticas no rodape e vao para results/sinteticos/.
 
-Este módulo só lê parâmetros, escolhe a fonte de dados e formata a saída. As
-contas do modelo estão todas na esteira; a única exceção é a série sintética
-aqui embaixo, que existe para a demonstração funcionar sem rede e por isso
-acompanha a interface, e não a DAL.
+Este modulo so le parametros, escolhe a fonte de dados e formata a saida. As
+contas do modelo estao todas na esteira. A unica excecao e a serie sintetica
+aqui embaixo, que acompanha a interface porque existe so pra demonstracao.
 """
 
 import argparse
@@ -34,8 +33,8 @@ import pandas as pd
 
 from app.principal import executar_pipeline
 
-# Períodos por ano, banco, n_scenarios e a série sintética de cada frequência.
-# A mensal vem primeiro por ser o padrão.
+# Periodos por ano, banco, n_scenarios e a serie sintetica de cada frequencia.
+# A mensal vem primeiro por ser o padrao.
 
 PERFIS = {
     "1mo": {"periodos_por_ano": 12,  "db": os.path.join("data", "mercado.db"),
@@ -53,13 +52,11 @@ W0 = 1.0
 
 
 def _dados_demo(perfil: dict, n: int = 1_050, seed: int = 7) -> pd.DataFrame:
-    """
-    Serie inventada de retornos, na frequencia do perfil escolhido.
-    """
+    """Serie inventada de retornos, na frequencia do perfil escolhido."""
 
     rng = np.random.default_rng(seed)
     ruido = rng.normal(0.0, perfil["sigma"], n)
-    ruido -= ruido.mean()                       # média exatamente 0
+    ruido -= ruido.mean()                       # media exatamente 0
     datas = pd.date_range("2022-05-24", periods=n, freq=perfil["freq_pandas"])
     fmt = "%Y-%m-%d" if perfil["periodos_por_ano"] == 252 else "%Y-%m"
     return pd.DataFrame({
@@ -82,11 +79,11 @@ def _analisar(argv) -> argparse.Namespace:
         description="Roda a esteira de Samuelson (1969) sobre Ibovespa + CDI.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     p.add_argument("--diario", action="store_true",
-                   help="usa a base diária (252 pregões) em vez da mensal")
+                   help="usa a base diaria (252 pregoes) no lugar da mensal")
     p.add_argument("--anos", type=float, default=ANOS,
                    help="horizonte de planejamento T, em anos")
     p.add_argument("--beta-anual", type=float, default=BETA_ANUAL,
-                   help="fator de desconto ANUAL (convertido para o período)")
+                   help="fator de desconto ANUAL (convertido para o periodo)")
     p.add_argument("--gamma", type=float, default=GAMMA,
                    help="coeficiente de aversao relativa ao risco")
     p.add_argument("--cdi-anual", type=float, default=None,
@@ -98,7 +95,7 @@ def _analisar(argv) -> argparse.Namespace:
                    help="cenarios de Monte Carlo; 0 = automatico por frequencia "
                         "(200k mensal, 4M diario)")
     p.add_argument("--n-paths", type=int, default=3_000,
-                   help="trajetorias simuladas no forward pass")
+                   help="trajetorias simuladas na propagacao pra frente")
     p.add_argument("--seed", type=int, default=1, help="semente (reprodutibilidade)")
     p.add_argument("--graficos", action="store_true",
                    help="alem de imprimir, escreve as figuras em results/")
