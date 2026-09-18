@@ -64,13 +64,23 @@ class RendaVariavel:
         dela vem em coluna_data e ela fica de fora das contas.
         """
         df = retornos.drop(columns=[coluna_data]) if coluna_data in retornos.columns else retornos.copy()
+
+        if df.shape[1] == 0:
+            raise ValueError("retornos deve conter ao menos uma coluna de ativo.")
+        if df.shape[0] < 2:
+            raise ValueError("são necessárias ao menos 2 observações de retorno.")
+        nao_numericas = [c for c in df.columns
+                         if not pd.api.types.is_numeric_dtype(df[c])]
+        if nao_numericas:
+            raise ValueError(
+                f"colunas não numéricas em retornos: {nao_numericas}. "
+                f"Informe o nome da coluna de data em coluna_data (veio "
+                f"{coluna_data!r}) ou remova essas colunas."
+            )
+
         self.ativos: list[str] = list(df.columns)
         self._R: np.ndarray = df.to_numpy(dtype=np.float64)  # (T, N)
 
-        if self._R.ndim != 2 or self._R.shape[1] == 0:
-            raise ValueError("retornos deve conter ao menos uma coluna de ativo.")
-        if self._R.shape[0] < 2:
-            raise ValueError("são necessárias ao menos 2 observações de retorno.")
         if np.isnan(self._R).any():
             raise ValueError("retornos não pode conter NaN.")
 
