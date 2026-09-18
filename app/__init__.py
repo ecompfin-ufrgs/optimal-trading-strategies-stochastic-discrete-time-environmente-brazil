@@ -4,5 +4,5 @@ Os modulos rodam nesta ordem:
 
     dal -> mercado -> agente (+ nucleo) -> principal
 
-O desenho completo esta em docs/project/projeto.md.
+O desenho completo esta em docs/projeto/projeto.md.
 """
