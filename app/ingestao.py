@@ -16,7 +16,8 @@ No mensal a coluna data é AAAA-MM; no diário, AAAA-MM-DD. Cada
 frequência tem seu banco (data/mercado.db e data/mercado_diario.db),
 para que uma ingestão não sobrescreva a outra.
 
-Depois, python -m app usa o banco mensal automaticamente.
+Depois, cada frequência é lida pela execução correspondente: `python -m app`
+lê o banco mensal e `python -m app --diario` lê o diário.
 """
 
 import os
@@ -38,6 +39,12 @@ def montar_base(db_path: str | None = None, inicio: str = "2000-01-01",
     Devolve um dicionario com db_path, frequencia, n_periodos e periodo, que
     traz a primeira e a ultima data.
     """
+    if frequencia not in BANCO_PADRAO:
+        raise ValueError(
+            f"frequência desconhecida: {frequencia!r} (use {sorted(BANCO_PADRAO)})."
+        )
+    if fim is not None and fim < inicio:
+        raise ValueError(f"o início ({inicio}) vem depois do fim ({fim}).")
     if db_path is None:
         db_path = BANCO_PADRAO[frequencia]
     os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
@@ -74,16 +81,16 @@ def main() -> None:
           f"de {inicio} ate {fim or 'hoje'} ({unidade})...")
     try:
         info = montar_base(inicio=inicio, fim=fim, frequencia=frequencia)
-    except Exception as exc: 
+    except Exception as exc:
         print(f"\nERRO ao baixar os dados: {type(exc).__name__}: {exc}")
-        raise SystemExit(1)
+        raise SystemExit(1) from exc
     print(f"OK! Banco criado em: {info['db_path']}")
     print(f"  {info['n_periodos']} {unidade} de dados, "
           f"periodo {info['periodo'][0]} a {info['periodo'][1]}")
     if frequencia == "1mo":
         print("Agora rode:  python -m app")
     else:
-        print(f"Use no pipeline:  executar_pipeline({{'db_path': '{info['db_path']}', ...}})")
+        print("Agora rode:  python -m app --diario")
 
 
 if __name__ == "__main__":
