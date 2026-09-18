@@ -6,8 +6,9 @@ E aqui que acontece:
   - o calculo dos retornos a partir dos precos.
 
 Este e o unico modulo que sabe que existe banco e disco. As outras etapas so
-recebem e devolvem DataFrame, e nunca abrem o SQLite direto. O que esta aqui
-segue a secao "Projeto de dados" do docs/project/projeto.md.
+recebem e devolvem DataFrame, e nunca abrem o SQLite direto. E tambem quem cria
+o esquema das tabelas, com as restricoes de integridade do projeto (ESQUEMAS). O que esta aqui
+segue a secao "Projeto de dados" do docs/projeto/projeto.md.
 """
 
 import sqlite3
@@ -32,6 +33,26 @@ _LIMITE_ANOS_SGS = {"1mo": None, "1d": 10}
 # uns 2500 registros), entao o tempo de espera aqui e bem maior que o do Yahoo.
 _TIMEOUT_SGS = 90
 
+# O esquema das tres tabelas do projeto, com as restricoes da secao "Regras de
+# integridade" do docs/projeto/projeto.md: a data e chave primaria (AAAA-MM tem
+# 7 caracteres e AAAA-MM-DD tem 10), nenhuma coluna aceita nulo, o fechamento e
+# positivo e o CDI nao e negativo.
+ESQUEMAS: dict[str, tuple[str, ...]] = {
+    "ibovespa": (
+        "data TEXT PRIMARY KEY NOT NULL CHECK (length(data) IN (7, 10))",
+        "fechamento REAL NOT NULL CHECK (fechamento > 0)",
+    ),
+    "cdi": (
+        "data TEXT PRIMARY KEY NOT NULL CHECK (length(data) IN (7, 10))",
+        "cdi REAL NOT NULL CHECK (cdi >= 0)",
+    ),
+    "retornos": (
+        "data TEXT PRIMARY KEY NOT NULL CHECK (length(data) IN (7, 10))",
+        "ibov REAL NOT NULL",
+        "cdi REAL NOT NULL",
+    ),
+}
+
 
 def _formato_data(frequencia: str) -> str:
     """Formato da coluna data para a frequência pedida (valida o argumento)."""
@@ -50,7 +71,7 @@ def baixar_precos(
     frequencia: str = "1mo",
 ) -> pd.DataFrame:
     """
-    Baixa os precos de fechamento ajustado no Yahoo Finance. (F1)
+    Baixa os precos de fechamento no Yahoo Finance. (F1)
 
     Recebe a lista de tickers (por exemplo ["^BVSP"]), a data inicial e a
     final no formato AAAA-MM-DD (se a final vier None, usa hoje) e a
@@ -58,6 +79,9 @@ def baixar_precos(
 
     Devolve um DataFrame com a coluna data na frente, no formato AAAA-MM ou
     AAAA-MM-DD conforme a frequencia, e uma coluna por ticker.
+
+    O campo lido e o 'close' da API, o fechamento sem ajuste. Para o ^BVSP da
+    no mesmo, porque indice de pontos nao paga dividendo nem desdobra.
 
     Usa a API publica de graficos do Yahoo com o urllib, que ja vem no Python.
     Cheguei aqui porque o yfinance e o curl_cffi davam erro de certificado SSL
@@ -94,6 +118,7 @@ def baixar_precos(
         series[tk] = pd.Series(close, index=datas, name=tk)
 
     df = pd.DataFrame(series).dropna(how="any")
+    df = df[~df.index.duplicated(keep="last")]
     return df.reset_index().rename(columns={"index": "data"})
 
 
@@ -124,12 +149,66 @@ def gravar_sqlite(
     if_exists: str = "replace",
 ) -> None:
     """Grava um DataFrame numa tabela do SQLite. (F1, NF6)
+
+    Se a tabela for uma das tres do projeto, ela e criada a partir do ESQUEMAS,
+    com chave primaria na data, NOT NULL em tudo e os CHECK de dominio. Data
+    repetida, celula vazia ou fechamento negativo viram IntegrityError aqui, em
+    vez de atravessarem a esteira sem ninguem perceber. Qualquer outra tabela
+    cai no caminho generico do pandas, sem restricao.
+
+    A gravacao e tudo ou nada. O "replace" monta a tabela nova ao lado da
+    antiga e so troca as duas no fim: se alguma linha bater num CHECK, a base
+    que ja estava no banco continua inteira. Sem isso, um download meia-boca
+    derrubaria a tabela boa e deixaria uma vazia no lugar.
     """
- 
     _validar_identificador(tabela)
+    colunas = ESQUEMAS.get(tabela)
     with closing(sqlite3.connect(db_path)) as con:
-        df.to_sql(tabela, con, if_exists=if_exists, index=False)
-        con.commit()
+        try:
+            if colunas is None:
+                df.to_sql(tabela, con, if_exists=if_exists, index=False)
+                con.commit()
+                return
+            if if_exists == "fail" and _tabela_existe(con, tabela):
+                raise ValueError(f"a tabela {tabela!r} já existe em {db_path}.")
+            if if_exists != "replace":
+                con.execute(f"CREATE TABLE IF NOT EXISTS {tabela} ({', '.join(colunas)})")
+                df.to_sql(tabela, con, if_exists="append", index=False)
+                con.commit()
+                return
+
+            provisoria = f"{tabela}__novo"
+            con.execute(f"DROP TABLE IF EXISTS {provisoria}")
+            con.execute(f"CREATE TABLE {provisoria} ({', '.join(colunas)})")
+            try:
+                df.to_sql(provisoria, con, if_exists="append", index=False)
+                con.execute(f"DROP TABLE IF EXISTS {tabela}")
+                con.execute(f"ALTER TABLE {provisoria} RENAME TO {tabela}")
+                con.commit()
+            except Exception:
+                con.rollback()
+                con.execute(f"DROP TABLE IF EXISTS {provisoria}")
+                con.commit()
+                raise
+        except Exception as exc:
+            _reerguer_erro_sqlite(exc)
+
+
+def _reerguer_erro_sqlite(exc: Exception) -> None:
+    """Reergue o erro do sqlite3 que o pandas tenha embrulhado.
+
+    """
+    if isinstance(exc.__cause__, sqlite3.Error):
+        raise exc.__cause__ from None
+    raise exc
+
+
+def _tabela_existe(con: sqlite3.Connection, tabela: str) -> bool:
+    """Diz se a tabela ja existe no banco aberto em con."""
+    achou = con.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (tabela,)
+    ).fetchone()
+    return achou is not None
 
 
 def ler_sqlite(db_path: str, tabela: str) -> pd.DataFrame:
@@ -180,7 +259,9 @@ def baixar_cdi_bcb(inicio: str, fim: str | None = None,
 
 
 def _janelas(inicio: pd.Timestamp, fim: pd.Timestamp, limite_anos: int | None):
-    """Corta o periodo em pedacos de no maximo limite_anos. Se for None, devolve um pedaco so."""
+    """Corta o periodo em pedacos de no maximo limite_anos. Se for None, devolve um pedaco so.
+
+    """
     if limite_anos is None or fim <= inicio + pd.DateOffset(years=limite_anos):
         return [(inicio, fim)]
     partes, atual = [], inicio
