@@ -52,8 +52,10 @@ def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
     Como no artigo, o alpha pode ser qualquer numero: pode ficar negativo
     (venda a descoberto) e pode passar de 1 (alavancagem), sem limite.
     Com 2 ativos ou mais usa o SLSQP; com 1 ativo so usa o brentq.
+
+    Os dois caminhos levantam RuntimeError quando nao ha solucao: um alpha
+    errado com cara de certo atravessaria a esteira inteira sem dar sinal.
     """
-    
     R = np.asarray(R, dtype=float)
     N = R.shape[1]
     if alpha0 is None:
@@ -65,6 +67,12 @@ def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
             jac=lambda a: -funcao_foc(a, R, rf, gamma),
             method="SLSQP",
             options={"ftol": tol, "maxiter": int(maxiter), "disp": False})
+        if not res.success:
+            raise RuntimeError(
+                f"SLSQP nao convergiu em {N} ativos: {res.message} "
+                f"(nit={res.nit}). Tente outro alpha0, mais iteracoes (maxiter) "
+                "ou confira se a amostra de R tem cenarios acima e abaixo de rf."
+            )
         return res.x.copy()
 
     # caso de 1 ativo, com brentq. O G so cai, entao procuro G(lo) > 0 > G(hi).
@@ -147,7 +155,7 @@ def propagar_riqueza(w0, theta, alpha, R, rf):
     for t in range(T):
         c[:, t] = theta[t] * W[:, t]
         S[:, t] = W[:, t] - c[:, t]
-        R_p = rf + (R[:, t, :] - rf) @ alpha           # (n_paths,)
+        R_p = rf + (R[:, t, :] - rf) @ alpha
         W[:, t + 1] = S[:, t] * R_p
     # Condição terminal: consome toda a riqueza (theta_T = 1).
     c[:, T] = theta[T] * W[:, T]
