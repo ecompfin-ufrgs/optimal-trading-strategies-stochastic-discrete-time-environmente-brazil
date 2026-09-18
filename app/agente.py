@@ -52,12 +52,19 @@ class Investidor:
 
     # decisao de carteira e de consumo (F6, F8, F9)
     def carteira_otima(self, mercado: RendaVariavel, rf: float, *,
-                       n_scenarios: int = 100_000, seed: int | None = 42,
+                       n_scenarios: int = 200_000, seed: int | None = 42,
                        **opts) -> np.ndarray:
         """Carteira otima, resolvendo G(alpha)=0. (F6)
 
         Sorteia os cenarios do mercado (que vem liquidos) e converte pra fator
         bruto. O alpha e sempre livre, pode ser negativo e pode passar de 1.
+
+        O n_scenarios padrao e o da base mensal (200 mil). Quem chama pela
+        esteira nunca cai nele, porque o app.principal escolhe o numero pela
+        frequencia dos dados e passa explicito; ele serve so para uso direto
+        num notebook. Numa base diaria 200 mil e pouco: o excesso de retorno de
+        um pregao e pequeno perto do desvio-padrao dele, e o alpha oscila de
+        uma rodada para outra.
 
         O que vier em opts vai direto pro nucleo.resolver_alpha_otimo
         (tol, maxiter, alpha0).
