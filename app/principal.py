@@ -67,7 +67,8 @@ def executar_pipeline(config: dict) -> dict:
     O que volta: um dicionario com alpha_star (a carteira otima), theta e
     consumo_inicial, phi_hat, A_t (Etapa 3) e valor_V (Etapa 7, a funcao valor
     na riqueza inicial, que e o F11), a calibracao (mu_hat, sigma_hat e rf) e o
-    resumo da simulacao, com E_W_T, os percentis de W_T e as trajetorias
+    resumo da simulacao, com E_W_T, os percentis de W_T (W_T_p5 e W_T_p95)
+    e as trajetorias
     trajetoria_W_media, _mediana, _p5, _p95 e trajetoria_c_media, mais o
     consumo_por_ano ja somado dentro de cada ano. Vem tambem o periodos_por_ano
     e o beta ja convertido, pra quem for exibir os numeros nao precisar refazer
