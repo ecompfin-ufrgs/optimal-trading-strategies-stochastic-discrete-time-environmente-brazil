@@ -1,14 +1,14 @@
-"""app.graficos — figuras dos resultados do modelo (F16).
+"""app.graficos: as figuras dos resultados do modelo (F16).
 
-Gera em results/ as ilustrações usadas no documento. Este módulo fica fora
-da esteira: `app.principal` não importa ele, então quem só quer o resultado
-numérico não paga o custo de carregar o matplotlib.
+Gera em results/ as ilustracoes usadas no documento. Este modulo fica fora da
+esteira: o app.principal nao importa ele, entao quem so quer o resultado
+numerico nao paga o custo de carregar o matplotlib.
 
-Cada figura leva no rodapé a procedência, em duas linhas: de onde vieram os
-números (a série, se a base é real ou sintética, a janela e o R_f) e com que
-parâmetros a rodada foi feita.
+Cada figura leva no rodape a procedencia, em duas linhas: de onde vieram os
+numeros (a serie, se a base e real ou sintetica, a janela e o R_f) e com que
+parametros a rodada foi feita.
 
-Uso: python -m app --graficos (os parâmetros são os da própria execução).
+Uso: python -m app --graficos (os parametros sao os da propria execucao).
 """
 
 import os
@@ -44,8 +44,7 @@ def _salvar(fig, destino: str, nome: str, rodape: str) -> str:
 def montar_rodape(res: dict, cfg: dict, periodo: tuple[str, str], n_obs: int,
                   beta_anual: float, anos: float, unidade: str,
                   dados_reais: bool = True) -> str:
-    """Texto de procedência impresso em todas as figuras.
-    """
+    """Texto de procedencia impresso em todas as figuras."""
     rf_anual = (1.0 + res["rf"]) ** cfg["periodos_por_ano"] - 1.0
     origem_rf = "informado" if cfg.get("cdi_anual") is not None else "série CDI"
     fonte = "dados reais" if dados_reais else "dados SINTÉTICOS"
@@ -64,9 +63,9 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
     """Faz as seis figuras e devolve os caminhos dos arquivos escritos.
 
     O res e o que o executar_pipeline devolveu. O mercado e o rf so sao
-    necessarios para os dois graficos que refazem a otimizacao; o consumo
-    somado por ano ja vem pronto em res["consumo_por_ano"], para a figura e
-    a linha de comando nao fazerem a mesma conta cada uma do seu jeito.
+    necessarios para os dois graficos que refazem a otimizacao. O consumo
+    somado por ano ja vem pronto em res["consumo_por_ano"], entao a figura e a
+    linha de comando leem o mesmo numero.
     """
     os.makedirs(destino, exist_ok=True)
     g = float(cfg["gamma"])
@@ -112,9 +111,9 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
     theta = res["theta"]
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(np.arange(len(theta)), theta, color="#1f77b4")
-    ax.set_yscale("log")          # sem log, θ_t fica rente a zero e só dispara no fim
+    ax.set_yscale("log")          # sem log, o theta_t fica rente a zero e so dispara no fim
     ax.set_xlabel("t (períodos)"); ax.set_ylabel(r"$\theta_t$ (escala log)")
-    ax.set_title(r"Fração de consumo $\theta_t$ — crescente até $\theta_T = 1$")
+    ax.set_title(r"Fração de consumo $\theta_t$ (crescente até $\theta_T = 1$)")
     escritos.append(_salvar(fig, destino, "theta_t.png", rodape))
 
     # 5. a riqueza com a faixa entre os percentis 5 e 95
@@ -123,7 +122,7 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
                       res["trajetoria_W_p95"])
     fig, (ax, ax2) = plt.subplots(2, 1, figsize=(7, 5.4), sharex=True,
                                   gridspec_kw={"height_ratios": [3, 1]})
-    ax.fill_between(t, p5, p95, color="#1f77b4", alpha=0.3, label="P5–P95")
+    ax.fill_between(t, p5, p95, color="#1f77b4", alpha=0.3, label="P5-P95")
     ax.plot(t, media, color="#1f77b4", label="média")
     ax.set_yscale("log")
     ax.set_ylabel(r"$W_t$ (escala log)")
