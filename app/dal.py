@@ -8,7 +8,7 @@ E aqui que acontece:
 Este e o unico modulo que sabe que existe banco e disco. As outras etapas so
 recebem e devolvem DataFrame, e nunca abrem o SQLite direto. E tambem quem cria
 o esquema das tabelas, com as restricoes de integridade do projeto (ESQUEMAS),
-seguindo a secao "Projeto de dados" do docs/projeto/projeto.md.
+seguindo a secao "Projeto de dados" do docs/project/projeto.md.
 """
 
 import sqlite3
@@ -34,7 +34,7 @@ _LIMITE_ANOS_SGS = {"1mo": None, "1d": 10}
 _TIMEOUT_SGS = 90
 
 # O esquema das tres tabelas do projeto, com as restricoes da secao "Regras de
-# integridade" do docs/projeto/projeto.md: a data e chave primaria (AAAA-MM tem
+# integridade" do docs/project/projeto.md: a data e chave primaria (AAAA-MM tem
 # 7 caracteres e AAAA-MM-DD tem 10), nenhuma coluna aceita nulo, o fechamento e
 # positivo e o CDI nao e negativo.
 ESQUEMAS: dict[str, tuple[str, ...]] = {
@@ -274,4 +274,3 @@ def _validar_identificador(nome: str) -> None:
     """Confere se o nome da tabela e valido antes de montar o SQL."""
     if not nome.isidentifier():
         raise ValueError(f"nome de tabela invalido: {nome!r}")
-
