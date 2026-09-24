@@ -1,8 +1,9 @@
 """Pacote app: o modelo de consumo e portfolio de Samuelson (1969).
 
-Os modulos rodam nesta ordem:
+O app.principal liga os modulos nesta ordem:
 
-    dal -> mercado -> agente (+ nucleo) -> principal
+    dal -> mercado -> agente (+ nucleo) -> simulacao -> resultado
 
-O desenho completo esta em docs/projeto/projeto.md.
+A ingestao (app.ingestao) enche o banco antes, e as figuras (app.graficos)
+ficam fora da esteira. O desenho completo esta em docs/project/projeto.md.
 """
