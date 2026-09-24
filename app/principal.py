@@ -7,7 +7,10 @@ A ordem e esta (F10, NF5):
 O executar_pipeline e a unica porta de entrada da esteira: recebe um config e
 devolve o resultado pronto, com a carteira otima, o consumo e as trajetorias.
 Ficou assim para que desse para ligar outra interface depois sem mexer nos
-modulos de calculo. Aqui nao tem conta nenhuma, so a ligacao entre as etapas.
+modulos de calculo. As contas do modelo ficam nos outros modulos; aqui ficam
+so a ligacao entre as etapas e o que vai em volta dela: passar o beta e o
+CDI pro periodo, cortar os retornos em zero e resumir a simulacao (medias,
+percentis e o consumo por ano).
 """
 
 import numpy as np
@@ -65,14 +68,12 @@ def executar_pipeline(config: dict) -> dict:
         linha de comando pede 3000) e seed (42).
 
     O que volta: um dicionario com alpha_star (a carteira otima), theta e
-    consumo_inicial, phi_hat, A_t (Etapa 3) e valor_V (Etapa 7, a funcao valor
-    na riqueza inicial, que e o F11), a calibracao (mu_hat, sigma_hat e rf) e o
-    resumo da simulacao, com E_W_T, os percentis de W_T (W_T_p5 e W_T_p95)
-    e as trajetorias
+    consumo_inicial, phi_hat, A_t (Etapa 3), a calibracao (mu_hat, sigma_hat e
+    rf) e o resumo da simulacao, com E_W_T, os percentis de W_T (W_T_p5 e
+    W_T_p95) e as trajetorias
     trajetoria_W_media, _mediana, _p5, _p95 e trajetoria_c_media, mais o
-    consumo_por_ano ja somado dentro de cada ano. Vem tambem o periodos_por_ano
-    e o beta ja convertido, pra quem for exibir os numeros nao precisar refazer
-    a conta.
+    consumo_por_ano ja somado dentro de cada ano e dividido por w0, que e a
+    fracao da riqueza inicial consumida no ano.
     """
     cfg = dict(config)
     coluna_data = cfg.get("coluna_data", "data")
@@ -138,7 +139,9 @@ def executar_pipeline(config: dict) -> dict:
     # 5. o resultado
     W_T = sim["W"][:, -1]
     A_t = inv.coeficientes_A
-    valor_V = nucleo.funcao_valor(A_t, inv.w0, inv.gamma)
+    B_t = (nucleo.recorrencia_B(A_t, inv.phi_hat, beta)
+           if np.isclose(inv.gamma, 1.0) else None)
+    V = nucleo.funcao_valor(A_t, sim["W"], inv.gamma, B=B_t)
     W_p5, W_p50, W_p95 = np.percentile(sim["W"], [5, 50, 95], axis=0)
     return {
         "ativos": ativos,
@@ -156,11 +159,12 @@ def executar_pipeline(config: dict) -> dict:
         "W_T_p5": float(np.percentile(W_T, 5)),
         "W_T_p95": float(np.percentile(W_T, 95)),
         "A_t": A_t,
-        "valor_V": valor_V,
         "trajetoria_W_media": sim["W"].mean(axis=0),
         "trajetoria_W_mediana": W_p50,
         "trajetoria_W_p5": W_p5,
         "trajetoria_W_p95": W_p95,
         "trajetoria_c_media": sim["c"].mean(axis=0),
-        "consumo_por_ano": _consumo_por_ano(sim["c"].mean(axis=0), ppa, T),
+        "trajetoria_V_media": V.mean(axis=0),
+        "trajetoria_u_media": inv.utilidade(sim["c"]).mean(axis=0),
+        "consumo_por_ano": _consumo_por_ano(sim["c"].mean(axis=0) / inv.w0, ppa, T),
     }
