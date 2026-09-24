@@ -15,7 +15,6 @@ O código foi organizado em etapas ligadas em sequência: cada etapa recebe os d
 ```bash
 git clone https://github.com/ecompfin-ufrgs/optimal-trading-strategies-stochastic-discrete-time-environmente-brazil.git
 cd optimal-trading-strategies-stochastic-discrete-time-environmente-brazil
-python -m venv .venv
 ```
 ## Rodando o modelo
 
