@@ -10,7 +10,7 @@ O código foi organizado em etapas ligadas em sequência: cada etapa recebe os d
 
 ## Instalação
 
-É preciso ter o Python 3.12. As versões das bibliotecas estão presas no `requirements.txt`, e vale instalar a partir dele em vez de ir instalando uma por uma; a seção de problemas comuns, mais abaixo, explica o motivo.
+É preciso ter o Python 3.12. As versões das bibliotecas estão presas no `requirements.txt`, e vale instalar a partir dele em vez de ir instalando uma por uma.
 
 ```bash
 git clone https://github.com/ecompfin-ufrgs/optimal-trading-strategies-stochastic-discrete-time-environmente-brazil.git
