@@ -1,4 +1,4 @@
-"""Ponto de entrada do pacote: ``python -m app``.
+"""Ponto de entrada do pacote: ``python -m app`` (F14, NF2, NF5).
 
 Roda a esteira completa (``app.principal.executar_pipeline``) e imprime o
 resultado. Serve pra conferir que a aplicacao roda de ponta a ponta e pra
