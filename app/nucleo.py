@@ -1,17 +1,18 @@
 """app.nucleo: as contas do modelo de Samuelson (1969).
 
-Cada funcao aqui e uma equacao do artigo e nao guarda nada de uma chamada
-para a outra, entao da pra testar uma de cada vez (F6 a F11). E o lado de
-calculo da divisao que o NF5 pede.
+Cada funcao aqui e uma equacao do projeto do TCC e nao guarda nada de uma
+chamada para a outra, entao da pra testar uma de cada vez (F6 a F11). E o lado
+de calculo da divisao que o NF5 pede.
 
 Uma convencao importante: R e rf sao fatores de retorno BRUTO (1.02, 1.008) e
 nao a variacao. O retorno bruto da carteira fica
 
     R_p = rf + alpha * (R - rf)        e o excesso e (R - rf).
 
-Quem faz a conversao e o app.agente: ele pega os retornos liquidos do mercado,
-soma 1 e corta em zero (a acao nao pode valer menos que nada) antes de chamar
-estas funcoes.
+Quem chama estas funcoes faz a conversao antes: pega os retornos liquidos do
+mercado, soma 1 e corta em zero (a acao nao pode valer menos que nada). Isso
+acontece no app.agente, para achar a carteira, no app.principal, para a
+simulacao pra frente, e no app.graficos, nas figuras que refazem a otimizacao.
 """
 
 import numpy as np
@@ -50,7 +51,7 @@ def _objetivo_J(alpha, R, rf, gamma):
 def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
     """Acha o alpha que zera a condicao de primeira ordem, G()=0. (F6)
 
-    Como no artigo, o alpha pode ser qualquer numero: pode ficar negativo
+    Como no projeto, o alpha pode ser qualquer numero: pode ficar negativo
     (venda a descoberto) e pode passar de 1 (alavancagem), sem limite.
     Com 2 ativos ou mais usa o SLSQP; com 1 ativo so usa o brentq.
 
@@ -123,11 +124,38 @@ def fracoes_consumo(A, gamma):
     return A ** (-1.0 / gamma)
 
 
-def funcao_valor(A, W, gamma):
-    """V_t(W) = A_t*W^(1-gamma)/(1-gamma) (gamma diferente de 1) ou A_t*ln(W) (gamma=1). (F11)"""
+def recorrencia_B(A, phi, beta):
+    """B_T=0; B_t = -A_t*ln(A_t) + beta*A_{t+1}*ln(beta*A_{t+1}) + beta*A_{t+1}*Phi + beta*B_{t+1}. (F11)
+
+    So existe no caso gamma=1, em que V_t(W) = A_t*ln(W) + B_t. O B_t junta o
+    que nao depende de W e sai de colocar na equacao de Bellman o consumo
+    otimo W_t/A_t e a poupanca beta*A_{t+1}*W_t/A_t. O Phi aqui e o do caso
+    log, Phi_chapeu = E[ln R_p]. Sao T+1 valores, como os do A.
+    """
+    A = np.asarray(A, dtype=float)
+    T = A.shape[0] - 1
+    B = np.zeros(T + 1)
+    for t in range(T - 1, -1, -1):
+        B[t] = (-A[t] * np.log(A[t]) + beta * A[t + 1] * np.log(beta * A[t + 1])
+                + beta * A[t + 1] * phi + beta * B[t + 1])
+    return B
+
+
+def funcao_valor(A, W, gamma, B=None):
+    """V_t(W) = A_t*W^(1-gamma)/(1-gamma) (gamma diferente de 1) ou A_t*ln(W) + B_t (gamma=1). (F11)
+
+    Com gamma=1 a funcao valor tem o termo B_t da recorrencia_B, e sem ele o
+    resultado so valeria em t=T; por isso o B e obrigatorio nesse caso. Com
+    gamma diferente de 1 esse termo nao existe e o B e ignorado.
+    """
     A = np.asarray(A, dtype=float)
     if np.isclose(gamma, 1.0):
-        return A * np.log(W)
+        if B is None:
+            raise ValueError(
+                "com gamma=1 a funcao valor precisa do termo B_t "
+                "(nucleo.recorrencia_B); sem ele o valor so vale em t=T."
+            )
+        return A * np.log(W) + np.asarray(B, dtype=float)
     return A * W ** (1.0 - gamma) / (1.0 - gamma)
 
 
