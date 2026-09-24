@@ -86,7 +86,7 @@ Sem a flag nenhum arquivo é escrito. Isso é de propósito: dá para ficar test
 
 No rodapé de cada figura ficam as informações da rodada que gerou ela: qual base, a janela de datas, o R_f, gamma, beta (ao ano e por período), T, W0, a quantidade de cenários e de trajetórias, a semente e o alpha ótimo que saiu. A ideia é que essas informações acompanhem a imagem quando ela for colada no documento, em vez de ficarem num arquivo de metadados separado, que provavelmente acabaria desatualizado.
 
-Cinco desses gráficos voltam a usar os cenários de Monte Carlo e por isso demoram. O do G(alfa) só reavalia a condição de primeira ordem em 60 pontos; os outros quatro, o do alpha contra gamma, retorno esperado e volatilidade e o do consumo contra o prêmio de risco, refazem a otimização. Os de sensibilidade usam sempre os mesmos cenários, para a diferença entre um ponto e outro vir só do parâmetro que mudou (são a versão em figura dos testes do F12). Na base diária, com os 4 milhões de cenários, a execução com a flag leva cerca de 1 minuto, contra poucos segundos sem ela.
+Cinco desses gráficos voltam a usar os cenários de Monte Carlo e por isso demoram. O do G(alpha) só reavalia a condição de primeira ordem em 60 pontos; os outros quatro, o do alpha contra gamma, retorno esperado e volatilidade e o do consumo contra o prêmio de risco, refazem a otimização. Os de sensibilidade usam sempre os mesmos cenários, para a diferença entre um ponto e outro vir só do parâmetro que mudou (são a versão em figura dos testes do F12). Na base diária, com os 4 milhões de cenários, a execução com a flag leva cerca de 1 minuto, contra poucos segundos sem ela.
 
 ---
 
