@@ -73,10 +73,10 @@ Isso escreve nove figuras em `results/`, na mesma execução que faz as contas. 
 
 | Figura | O que mostra |
 |---|---|
-| `foc_G_de_alpha.png` | a curva G(alfa) cruzando o zero, que é onde fica o alfa ótimo |
-| `alpha_vs_gamma.png` | o alfa ótimo caindo conforme o gamma sobe (mais ou menos na proporção de 1/gamma) |
-| `alpha_vs_mu.png` | o alfa ótimo subindo com o retorno esperado, e passando pelo zero quando ele fica igual ao CDI |
-| `alpha_vs_sigma.png` | o alfa ótimo caindo conforme a volatilidade sobe |
+| `foc_G_de_alpha.png` | a curva G(alpha) cruzando o zero, que é onde fica o alpha ótimo |
+| `alpha_vs_gamma.png` | o alpha ótimo caindo conforme o gamma sobe (mais ou menos na proporção de 1/gamma) |
+| `alpha_vs_mu.png` | o alpha ótimo subindo com o retorno esperado, e passando pelo zero quando ele fica igual ao CDI |
+| `alpha_vs_sigma.png` | o alpha ótimo caindo conforme a volatilidade sobe |
 | `theta_t.png` | as frações de consumo subindo até chegar em 1 (F13), em escala log |
 | `theta_vs_beta.png` | a fração consumida no primeiro período caindo conforme o beta sobe |
 | `theta_vs_premio.png` | como a fração consumida no primeiro período reage ao prêmio de risco, com uma curva por gamma: sobe se gamma > 1, cai se gamma < 1 e não muda se gamma = 1 |
@@ -87,7 +87,7 @@ Sem a flag nenhum arquivo é escrito. Isso é de propósito: dá para ficar test
 
 No rodapé de cada figura ficam as informações da rodada que gerou ela: qual base, a janela de datas, o R_f, gamma, beta (ao ano e por período), T, W0, a quantidade de cenários e de trajetórias, a semente e o alpha ótimo que saiu. A ideia é que essas informações acompanhem a imagem quando ela for colada no documento, em vez de ficarem num arquivo de metadados separado, que provavelmente acabaria desatualizado.
 
-Cinco desses gráficos voltam a usar os cenários de Monte Carlo e por isso demoram. O do G(alfa) só reavalia a condição de primeira ordem em 60 pontos; os outros quatro, o do alfa contra gamma, retorno esperado e volatilidade e o do consumo contra o prêmio de risco, refazem a otimização. Os de sensibilidade usam sempre os mesmos cenários, para a diferença entre um ponto e outro vir só do parâmetro que mudou (são a versão em figura dos testes do F12). Na base diária, com os 4 milhões de cenários, a execução com a flag leva cerca de 1 minuto, contra poucos segundos sem ela.
+Cinco desses gráficos voltam a usar os cenários de Monte Carlo e por isso demoram. O do G(alfa) só reavalia a condição de primeira ordem em 60 pontos; os outros quatro, o do alpha contra gamma, retorno esperado e volatilidade e o do consumo contra o prêmio de risco, refazem a otimização. Os de sensibilidade usam sempre os mesmos cenários, para a diferença entre um ponto e outro vir só do parâmetro que mudou (são a versão em figura dos testes do F12). Na base diária, com os 4 milhões de cenários, a execução com a flag leva cerca de 1 minuto, contra poucos segundos sem ela.
 
 ---
 
