@@ -1,8 +1,11 @@
 """app.mercado: a renda fixa (CDI) e a renda variavel (Ibovespa).
 
 Cada classe guarda os dados de um mercado (F2, F3, F4). E aqui que acontece a
-Etapa 0 do artigo, a calibracao: a partir dos retornos historicos saem a taxa
-livre de risco, a media, a matriz de covariancia e o sorteio dos cenarios.
+maior parte da Etapa 0 do projeto do TCC, a calibracao: a RendaVariavel estima
+a media e a matriz de covariancia dos retornos historicos e sorteia os
+cenarios, e a RendaFixa converte um CDI anual informado em taxa por periodo.
+Quando nenhum CDI anual e informado, o app.principal usa a media da serie do
+CDI dos dados.
 
 A parte de otimizacao (o alpha, o A_t) fica no app.nucleo.
 """
@@ -54,7 +57,7 @@ class RendaVariavel:
     """Mercado de renda variavel (Ibovespa): a distribuicao dos retornos. (F4)
 
     Trabalha com retornos liquidos, do mesmo jeito que estao na tabela
-    retornos do banco. A diferenca R - R_f e montada depois, no agente.
+    retornos do banco. A diferenca R - R_f e montada depois, no nucleo.
     """
 
     def __init__(self, retornos: pd.DataFrame, coluna_data: str = "data") -> None:
@@ -78,7 +81,7 @@ class RendaVariavel:
             )
 
         self.ativos: list[str] = list(df.columns)
-        self._R: np.ndarray = df.to_numpy(dtype=np.float64)  # (T, N)
+        self._R: np.ndarray = df.to_numpy(dtype=np.float64)
 
         if np.isnan(self._R).any():
             raise ValueError("retornos nao pode conter NaN.")
@@ -104,8 +107,9 @@ class RendaVariavel:
         Sorteia n cenarios de retorno de uma normal com a media e a
         covariancia estimadas.
 
-        E o que alimenta o Monte Carlo da Etapa 1. Passando a mesma semente sai
-        sempre o mesmo resultado, que e o que o NF4 pede.
+        E o que alimenta o Monte Carlo da Etapa 1, a simulacao pra frente e os
+        graficos que refazem a otimizacao. Passando a mesma semente sai sempre
+        o mesmo resultado, que e o que o NF4 pede.
         """
         rng = np.random.default_rng(seed)
         mu = self.media()
