@@ -5,15 +5,19 @@ E aqui que acontece:
   - a gravacao e a leitura das tabelas no SQLite;
   - o calculo dos retornos a partir dos precos.
 
-Este e o unico modulo que sabe que existe banco e disco. As outras etapas so
+Este e o unico modulo que conhece o banco. As outras etapas so
 recebem e devolvem DataFrame, e nunca abrem o SQLite direto. E tambem quem cria
 o esquema das tabelas, com as restricoes de integridade do projeto (ESQUEMAS),
 seguindo a secao "Projeto de dados" do docs/project/projeto.md.
 """
 
+import json
 import sqlite3
 from contextlib import closing
+from datetime import date, datetime, timezone
 from typing import Sequence
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 
 import pandas as pd
 
@@ -56,12 +60,11 @@ ESQUEMAS: dict[str, tuple[str, ...]] = {
 
 def _formato_data(frequencia: str) -> str:
     """Formato da coluna data para a frequencia pedida (valida o argumento)."""
-    try:
-        return FORMATO_DATA[frequencia]
-    except KeyError:
+    if frequencia not in FORMATO_DATA:
         raise ValueError(
             f"frequencia desconhecida: {frequencia!r} (use {sorted(FORMATO_DATA)})."
-        ) from None
+        )
+    return FORMATO_DATA[frequencia]
 
 
 def baixar_precos(
@@ -85,21 +88,14 @@ def baixar_precos(
 
     Usa a API publica de graficos do Yahoo com o urllib, que ja vem no Python.
     Cheguei aqui porque o yfinance e o curl_cffi davam erro de certificado SSL
-    no Windows. Os imports ficam dentro da funcao pra que os testes de banco e
-    de retorno continuem rodando sem internet.
+    no Windows.
     """
-    import json
-    from datetime import datetime, timezone
-    from urllib.parse import quote
-    from urllib.request import Request, urlopen
-
     fmt = _formato_data(frequencia)
 
-    def _epoch(d: str) -> int:
-        return int(pd.Timestamp(d, tz="UTC").timestamp())
-
-    p1 = _epoch(inicio)
-    p2 = _epoch(fim or datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+    # a API pede as datas em segundos desde 1970 (epoch), em UTC
+    fim_texto = fim or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    p1 = int(pd.Timestamp(inicio, tz="UTC").timestamp())
+    p2 = int(pd.Timestamp(fim_texto, tz="UTC").timestamp())
 
     series: dict[str, pd.Series] = {}
     for tk in ativos:
@@ -225,18 +221,13 @@ def baixar_cdi_bcb(inicio: str, fim: str | None = None,
     cdi ja em decimal e por periodo (uns 0.0034 no mensal e 0.00047 no diario).
     A fonte e oficial e de graca, nao precisa cadastro, mas precisa internet.
 
-    Os imports ficam dentro da funcao e sao todos da biblioteca padrao. A serie
-    diaria vem em pedacos de 10 anos, que e o limite da API, e depois eles sao
-    juntados.
+    A serie diaria vem em pedacos de 10 anos, que e o limite da API, e depois
+    eles sao juntados.
     """
-    import json
-    from datetime import date as _date
-    from urllib.request import urlopen
-
     fmt = _formato_data(frequencia)
     serie = _SERIE_CDI[frequencia]
     ini = pd.to_datetime(inicio)
-    dfim = pd.to_datetime(fim or _date.today().isoformat())
+    dfim = pd.to_datetime(fim or date.today().isoformat())
 
     partes = []
     for janela_ini, janela_fim in _janelas(ini, dfim, _LIMITE_ANOS_SGS[frequencia]):
