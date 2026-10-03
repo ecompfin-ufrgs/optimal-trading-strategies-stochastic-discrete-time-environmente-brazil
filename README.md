@@ -81,10 +81,10 @@ Isso escreve nove figuras em `results/`, na mesma execução do modelo. As que e
 
 | Figura | O que mostra |
 |---|---|
-| `foc_G_de_alpha.png` | a curva G(alfa) cruzando o zero, que é onde fica o alfa ótimo |
-| `alpha_vs_gamma.png` | o alfa ótimo caindo conforme o gamma sobe (mais ou menos na proporção de 1/gamma) |
-| `alpha_vs_mu.png` | o alfa ótimo subindo com o retorno esperado, e passando pelo zero quando ele fica igual ao CDI |
-| `alpha_vs_sigma.png` | o alfa ótimo caindo conforme a volatilidade sobe |
+| `foc_G_de_alpha.png` | a curva G(alpha) cruzando o zero, que é onde fica o alpha ótimo |
+| `alpha_vs_gamma.png` | o alpha ótimo caindo conforme o gamma sobe (mais ou menos na proporção de 1/gamma) |
+| `alpha_vs_mu.png` | o alpha ótimo subindo com o retorno esperado, e passando pelo zero quando ele fica igual ao CDI |
+| `alpha_vs_sigma.png` | o alpha ótimo caindo conforme a volatilidade sobe |
 | `theta_t.png` | as frações de consumo subindo até chegar em 1 (F13), em escala log |
 | `theta_vs_beta.png` | a fração consumida no primeiro período caindo conforme o beta sobe |
 | `theta_vs_premio.png` | como a fração consumida no primeiro período reage ao prêmio de risco, com uma curva por gamma: sobe se gamma > 1, cai se gamma < 1 e não muda se gamma = 1 |
@@ -124,7 +124,7 @@ Sem nenhuma data, o mensal começa em 2000-01-01. Nos dois casos os resultados p
 ```
 app/                      pacote da aplicação
   dal.py                  acesso a dados: download, SQLite, retornos (F1, NF6)
-  ingestao.py             popula o banco a partir das fontes reais (F1, NF6)
+  ingestao.py             registra o banco a partir das fontes reais (F1, NF6)
   mercado.py              RendaFixa (CDI) e RendaVariavel (Ibovespa) (F2–F4)
   agente.py               Investidor CRRA (F5, F6, F8, F9)
   nucleo.py               as contas do modelo, em funções separadas (F6–F11)
