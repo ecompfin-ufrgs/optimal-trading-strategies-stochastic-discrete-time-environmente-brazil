@@ -51,9 +51,10 @@ class Investidor:
         return np.asarray(c, dtype=float) ** (-self.gamma)
 
     # decisao de carteira e de consumo (F6, F8, F9)
-    def carteira_otima(self, mercado: RendaVariavel, rf: float, *,
+    def carteira_otima(self, mercado: RendaVariavel, rf: float,
                        n_scenarios: int = 200_000, seed: int | None = 42,
-                       **opts) -> np.ndarray:
+                       tol: float = 1e-10, maxiter: int = 200,
+                       alpha0: np.ndarray | None = None) -> np.ndarray:
         """Carteira otima, resolvendo G(alpha)=0. (F6)
 
         Sorteia os cenarios do mercado (que vem liquidos) e converte pra fator
@@ -65,13 +66,14 @@ class Investidor:
         pouco, porque o excesso de retorno de um pregao e pequeno perto do
         desvio-padrao dele e o alpha oscila de uma rodada pra outra.
 
-        O que vier em opts vai direto pro nucleo.resolver_alpha_otimo
-        (tol, maxiter, alpha0).
+        O tol, o maxiter e o alpha0 vao direto pro
+        nucleo.resolver_alpha_otimo.
         """
         r = mercado.amostrar(n_scenarios, seed=seed)
         rf_bruto = 1.0 + rf
         R = np.maximum(1.0 + r, 0.0)  # preco nao fica < 0
-        alpha = nucleo.resolver_alpha_otimo(R, rf_bruto, self.gamma, **opts)
+        alpha = nucleo.resolver_alpha_otimo(R, rf_bruto, self.gamma, tol=tol,
+                                            maxiter=maxiter, alpha0=alpha0)
         self._alpha_star = alpha
         self._phi_hat = nucleo.phi_chapeu(alpha, R, rf_bruto, self.gamma)
         return alpha
