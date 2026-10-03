@@ -13,7 +13,7 @@ São duas séries históricas, uma para cada mercado. A frequência pode ser men
 
 ### Fluxo (transformação) dos dados
 
-O sistema começa obtendo os **dados brutos** do Ibovespa e do CDI. Em seguida, esses dados são transformados em **retornos por período**, que mostram quanto cada mercado ganhou ou perdeu em cada período (mês ou dia, conforme a frequência da ingestão). A partir desses retornos, o sistema calcula os **parâmetros estatísticos** necessários para o modelo, como retorno esperado, risco etc. Por fim, esses parâmetros são usados para gerar as **trajetórias simuladas** de riqueza e consumo do investidor ao longo do tempo, produzindo os resultados finais da aplicação. A informação muda de forma ao longo da esteira:
+Os dados mudam de forma em três passagens: as séries brutas do Ibovespa e do CDI viram retornos por período (mês ou dia, conforme a ingestão), os retornos viram os parâmetros da calibração (média, covariância e R_f), e os parâmetros viram as trajetórias simuladas de riqueza e consumo:
 
 ```
    dados brutos          retornos por periodo       parametros          trajetorias
@@ -50,7 +50,7 @@ A escolha foi ter uma tabela de dados brutos para cada mercado e mais uma tabela
               +----------------+
 ```
 
-A ligação entre `ibovespa`/`cdi` e `retornos` é feita pela data, já que as três tabelas usam a mesma chave `data`. Isto é, as tabelas de dados do Ibovespa e do CDI estão conectadas às "retornos" apenas pelo fato de usarem o mesmo identificador de tempo (a coluna de data), mas sem uma ligação fixa dentro do banco de dados. O sistema pega os dados brutos dessas duas fontes e calcula uma nova tabela chamada `retornos`, que mostra a variação de cada período (mês ou dia, conforme a frequência). Assim, essa tabela não é uma fonte original de dados nem depende diretamente de outra dentro do banco, ela é gerada automaticamente a partir das outras duas sempre que necessário.
+A ligação entre `ibovespa`/`cdi` e `retornos` é só a coluna `data`, a chave das três tabelas; não há chave estrangeira. A `retornos` é calculada pela ingestão (`montar_base`) a partir das séries baixadas e gravada junto com as outras duas, e não se atualiza sozinha se uma delas mudar.
 
 #### Dicionário de dados
 
@@ -70,7 +70,7 @@ O formato da coluna `data` muda junto com a frequência da ingestão: fica `AAAA
 
 ### Formato tabular
 
-A aplicação não lê nem escreve CSV: a entrada é o SQLite, que a ingestão enche, e a saída são as figuras em `results/`. Mas a tabela `retornos` já é uma tabela em formato de planilha, de modo que exportá-la para CSV é uma questão de `to_csv` e nada mais precisa mudar de forma. A coluna `data` vem primeiro, e depois uma coluna para cada ativo. Os valores ficam sempre em decimal (`0.0213`, e não `2,13%`) e não pode haver célula vazia.
+A aplicação não lê nem escreve CSV: a entrada é o SQLite, que a ingestão enche, e a saída são as figuras em `results/`. Mas a tabela `retornos` já é uma tabela plana, de modo que exportá-la para CSV é uma questão de `to_csv` e nada mais precisa mudar de forma. A coluna `data` vem primeiro, e depois uma coluna para cada ativo. Os valores ficam sempre em decimal (`0.0213`, e não `2,13%`) e não pode haver célula vazia.
 
 ```csv
 data,ibov,cdi
@@ -118,9 +118,9 @@ Entre uma etapa e outra, os dados ficam só na memória. As séries de preços e
 
 <!--Liste os módulos e pacotes e apresente uma figura com a estrutura que os liga-->
 
-A aplicação segue o modelo arquitetural conhecido como pipes and filters. A ideia é que os dados passem por uma esteira de etapas de processamento, que são os filtros, ligadas pelos dados que saem de uma etapa e entram na próxima, que são os pipes. Cada filtro tem uma responsabilidade só: recebe dados, transforma e repassa adiante.
+A aplicação é uma esteira no estilo *pipes and filters*: a DAL, o mercado, o agente e a simulação, nessa ordem, cada etapa com uma responsabilidade só e recebendo o que a anterior devolveu.
 
-A interface da aplicação é a linha de comando, no `app.__main__`. Ela não resolve nada do modelo: lê os parâmetros que o usuário passou, monta o `config`, chama uma única função da esteira e formata o que voltou, sem refazer nada do modelo: a única conta que ela faz sobre o resultado é passar R_f e mu para taxas ao ano na hora de imprimir. Até o consumo somado por ano, que ela imprime e a figura desenha, já vem pronto da esteira, então os dois sempre mostram o mesmo número. A única coisa que ela produz sozinha é a série sintética de demonstração, que acompanha a interface porque existe só para a aplicação rodar sem rede. Essa função é a `app.principal.executar_pipeline`, que recebe um dicionário e devolve outro, e é a única porta de entrada da esteira. Concentrar tudo nela deixa o núcleo de cálculo sem saber quem está chamando, então dá para ligar outra interface depois sem mexer em nada do que está aqui dentro.
+A interface da aplicação é a linha de comando, no `app.__main__`. Ela lê os parâmetros que o usuário passou, monta o `config`, chama a `app.principal.executar_pipeline` e formata o que voltou. A `executar_pipeline` recebe um dicionário, devolve outro e é a única porta de entrada da esteira. A única conta que a linha de comando faz sobre o resultado é passar R_f e mu para taxas ao ano na hora de imprimir; até o consumo somado por ano, que ela imprime e a figura desenha, já vem pronto da esteira, e por isso os dois mostram sempre o mesmo número. O que ela produz sozinha é a série sintética de demonstração, que existe só para a aplicação rodar sem rede. Como tudo passa pela `executar_pipeline`, o núcleo de cálculo não sabe quem o chama, e dá para ligar outra interface depois sem mexer na esteira.
 
 O requisito NF5 pede também a separação de paradigmas, que ficou assim:
 
@@ -189,7 +189,7 @@ Quem liga tudo isso na ordem certa é o módulo principal (`app.principal`, NF5)
 
 ### `app.dal`: Data Access Layer (F1, NF6)
 
-Faz a leitura das fontes externas e guarda tudo no SQLite. É o único módulo que sabe que existe um banco e um disco.
+Faz a leitura das fontes externas e guarda tudo no SQLite. É o único módulo que conhece o banco.
 
 ```python
 ESQUEMAS: dict[str, tuple[str, ...]]
@@ -217,7 +217,7 @@ def calcular_retornos(precos: "DataFrame",
     """Converte preços em retornos por período, alinhados por data."""
 ```
 
-O parâmetro `frequencia` muda mais coisas do que parece. Com `"1mo"`, que é o padrão, a coluna `data` sai no formato `AAAA-MM`; com `"1d"` sai como `AAAA-MM-DD`. Muda também de onde vem o CDI: a série 4391, acumulada no mês, contra a série 12, que é diária. E tem um detalhe da API do Banco Central: ela recusa pedidos de série diária com mais de 10 anos e responde com HTTP 406. Por causa disso a DAL corta o período em janelas de 10 anos, faz um pedido para cada uma e depois junta tudo. As janelas não se sobrepõem, porque a seguinte começa um dia depois do fim da anterior; o `drop_duplicates` que vem em seguida é só uma garantia a mais, para o caso de a API devolver a data de fronteira nos dois pedidos.
+Com `frequencia="1mo"`, que é o padrão, a coluna `data` sai no formato `AAAA-MM`; com `"1d"`, sai como `AAAA-MM-DD`. A frequência também escolhe a série do CDI: a 4391, acumulada no mês, ou a 12, diária. A API do Banco Central recusa pedidos de série diária com mais de 10 anos (HTTP 406), e por isso a DAL corta o período em janelas de 10 anos, faz um pedido para cada uma e depois junta tudo. As janelas não se sobrepõem, porque a seguinte começa um dia depois do fim da anterior; o `drop_duplicates` que vem em seguida é só uma garantia a mais, para o caso de a API devolver a data de fronteira nos dois pedidos.
 
 A `gravar_sqlite` é a única porta de escrita do banco, e é ela que aplica o `ESQUEMAS` descrito lá em cima: chave primária na data, `NOT NULL` em tudo e os `CHECK` de domínio, com a substituição feita de forma que uma gravação interrompida não deixe uma tabela vazia no lugar de uma boa. Uma tabela que não esteja no `ESQUEMAS` (as dos notebooks de teste, por exemplo) cai no caminho genérico do pandas, sem restrição.
 
@@ -268,11 +268,11 @@ class RendaVariavel:
         """Gera n cenários de retorno R normalmente distribuido para o Monte Carlo."""
 ```
 
-O `periodos_por_ano` da `RendaFixa` é o que faz a conversão de ano para período, e a conversão é composta: `R_f = (1 + cdi_anual)^(1/periodos_por_ano) - 1`. Dizer só "CDI de 13%" não basta, porque o mesmo número vira `0.000485` por pregão ou `0.01024` por mês.
+O `periodos_por_ano` da `RendaFixa` é o que faz a conversão de ano para período, e a conversão é composta: `R_f = (1 + cdi_anual)^(1/periodos_por_ano) - 1`. Um CDI de 13% ao ano vira `0.000485` por pregão e `0.01024` por mês.
 
-Uma observação de notação. No código, `R_f` é a taxa líquida por período (os `0.000485` acima), e as funções do `nucleo` recebem o fator bruto `1 + R_f`.
+Uma observação de notação. No código, `R_f` é a taxa líquida por período (os `0.000485` acima), e as funções do `nucleo` recebem o fator bruto `1 + R_f`. No `projeto.tex` e no `artigo.tex`, R_f já denota o fator bruto, e por isso o R_f das equações dos textos corresponde ao `1 + R_f` do código. A saída da linha de comando e o rodapé das figuras mostram a taxa líquida.
 
-A classe valida as duas entradas no construtor, como as outras entidades do projeto fazem com as suas: o `cdi_anual` tem que ser maior que -1 e o `periodos_por_ano`, pelo menos 1. O motivo é que a conversão eleva `(1 + cdi_anual)` a um expoente fracionário, e com a base negativa o resultado sai **complexo**. Isso não interrompe a execução: o numpy descarta a parte imaginária mais adiante, o R_f fica errado e a esteira devolve um alpha\* de aparência normal. Por isso a checagem fica logo na entrada.
+A classe valida as duas entradas no construtor, como as outras entidades do projeto fazem com as suas: o `cdi_anual` tem que ser maior que -1 e o `periodos_por_ano`, pelo menos 1. O motivo é que a conversão eleva `(1 + cdi_anual)` a um expoente fracionário, e com a base negativa o resultado sai complexo. Isso não interrompe a execução: o numpy descarta a parte imaginária mais adiante, o R_f fica errado e a esteira devolve um alpha\* de aparência normal. Por isso a checagem fica logo na entrada.
 
 Essa checagem é de domínio. Quem recusa valores apenas implausíveis (um CDI de 300% ao ano, por exemplo, quase sempre é `3` digitado no lugar de `0.03`) é a interface de linha de comando, que limita o `--cdi-anual` à faixa de -0,5 a 1,0. São responsabilidades diferentes: o limite matemático vale para qualquer chamador, inclusive os notebooks que usam `executar_pipeline` direto.
 
@@ -296,27 +296,28 @@ class Investidor:
         """u(c) = c^(1-gamma)/(1-gamma), ou ln c quando gamma=1. (F5)"""
     def utilidade_marginal(self, c: float) -> float:
         """u'(c) = c^(-gamma). (F5)"""
-    def carteira_otima(self, mercado: "RendaVariavel", rf: float, *,
+    def carteira_otima(self, mercado: "RendaVariavel", rf: float,
                        n_scenarios: int = 200_000, seed: int | None = 42,
-                       **opts) -> "ndarray":
+                       tol: float = 1e-10, maxiter: int = 200,
+                       alpha0: "ndarray | None" = None) -> "ndarray":
         """Carteira ótima alpha* via FOC G(alpha*)=0; alpha sempre irrestrito. (F6)"""
     def fracoes_consumo(self) -> "ndarray":
         """Frações de consumo theta_t = A_t^(-1/gamma), t=0..T. (F8, F9)"""
 ```
 
-O beta é um número sem unidade e, com a hipótese de retornos independentes e identicamente distribuídos, ele nem aparece na condição de primeira ordem que resolve o alpha. É exatamente por isso que a carteira ótima não muda com o tempo e a miopia acontece. Como o beta nem é argumento da G, o alpha ótimo e o Phi não mudam quando ele muda, e isso não precisa de teste. O que o beta governa é a recorrência `A_t` e, por consequência, as frações de consumo.
+O beta não aparece na condição de primeira ordem que resolve o alpha: na equação de Bellman, ele e o coeficiente `A_{t+1}` multiplicam o único termo que depende do alpha e saem da derivada. O cancelamento do `A_{t+1}`, que carrega o horizonte restante, torna a decisão míope, e a hipótese de retornos i.i.d. faz com que ela seja a mesma em todos os períodos. Como o beta não é argumento da G, o alpha ótimo e o Phi não mudam quando ele muda, e isso não precisa de teste. O que o beta governa é a recorrência `A_t` e, por consequência, as frações de consumo.
 
-O problema é que o beta entra elevado a `t`, e `t` conta períodos, então o mesmo número descreve investidores completamente diferentes conforme a frequência dos dados. Um beta de 0,96 ao mês equivale a 0,613 ao ano, mas um beta de 0,96 por pregão equivale a 3,4*10^-5 ao ano, o que seria um investidor que consome cerca de 92% da riqueza inicial logo no primeiro ano (com gamma = 5 e horizonte de 5 anos). Para não cair nessa confusão, o `app.__main__` fixa o desconto em termos anuais (`BETA_ANUAL = 0.96`) e converte para o período: no diário fica `beta_pregao = beta_anual^(1/252) = 0,999838`. Ao reportar um resultado é bom sempre dizer as duas formas, e o rodapé das figuras traz as duas.
+O beta, porém, entra elevado a `t`, e `t` conta períodos, então o mesmo número descreve investidores completamente diferentes conforme a frequência dos dados. Um beta de 0,96 ao mês equivale a 0,613 ao ano, mas um beta de 0,96 por pregão equivale a 3,4*10^-5 ao ano, o que seria um investidor que consome cerca de 92% da riqueza inicial logo no primeiro ano (com gamma = 5 e horizonte de 5 anos). Para não cair nessa confusão, o `app.__main__` fixa o desconto em termos anuais (`BETA_ANUAL = 0.96`) e converte para o período: no diário fica `beta_pregao = beta_anual^(1/252) = 0,999838`. Ao reportar um resultado é bom sempre dizer as duas formas, e o rodapé das figuras traz as duas.
 
 ### `app.nucleo`: as funções de cálculo do modelo (F6 a F11)
 
-Cada função é uma equação do projeto do TCC e dá para testar isolada das outras.
+Cada função implementa uma equação do projeto do TCC.
 
 ```python
 def funcao_foc(alpha, R, rf, gamma):
     """G(alpha) = E[(R - rf * 1)/(rf + alpha^T(R - rf * 1))^gamma]. (F6)"""
 
-def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
+def resolver_alpha_otimo(R, rf, gamma, tol=1e-10, maxiter=200, alpha0=None):
     """Resolve G(alpha*)=0; alpha pertence a R^N irrestrito (ver nota abaixo).
     SLSQP para N >= 2, brentq para N=1. (F6)"""
 
@@ -341,7 +342,9 @@ def funcao_valor(A, W, gamma, B=None):
 
 Um caso à parte é o do gamma=1. A utilidade CRRA `c^(1-gamma)/(1-gamma)` é indefinida nesse ponto, e o limite dela é o logaritmo. As funções do módulo tratam isso explicitamente: a utilidade e o objetivo J viram `ln`, o Phi vira `E[ln R_p]`, a recorrência ganha a forma fechada `A_t = (1 - beta^(T-t+1))/(1 - beta)`, que não usa o Phi, porque com log-utilidade o consumo não depende do retorno da carteira; as frações viram `1/A_t` e a função valor vira `A_t * ln W + B_t`. O `B_t`, da `recorrencia_B`, junta o que não depende de W (termos em `A_t`, `A_{t+1}`, beta e o `E[ln R_p]`), e sem ele o valor só estaria certo em t = T. Por isso a `funcao_valor` recusa o gamma=1 quando o B não é passado. O teste é `np.isclose(gamma, 1.0)`, e não `gamma == 1.0`, para pegar também um gamma que tenha chegado de uma conta em ponto flutuante.
 
-Sobre o domínio dos pesos: a função `resolver_alpha_otimo` é sempre irrestrita, ou seja, o alpha pode ser qualquer número real, o que admite venda a descoberto (alpha negativo) e alavancagem (a soma dos pesos passando de 1), sem nenhum teto. Não existe opção para exigir carteira só comprada nem para impor limites. No caso de um ativo só, o `brentq` começa procurando no intervalo de -20 a 20 e vai dobrando esse intervalo até a função G trocar de sinal. Se ela nunca trocar, quer dizer que todos os cenários ficam do mesmo lado da taxa livre de risco (nenhum abaixo dela, ou nenhum acima), então não há alpha ótimo finito e a função levanta um `RuntimeError`.
+Na recorrência há ainda um ramo para `beta * A * Phi <= 0`, que devolve `A_t = 1`. Ele não acontece quando o Phi vem do `phi_chapeu`, porque lá o `R_p` tem piso em `_TOL_FALENCIA`; existe só para um Phi entregue na mão, e nesse caso o termo de continuação não tem raiz real e o período vale apenas o consumo.
+
+Sobre o domínio dos pesos: a função `resolver_alpha_otimo` é sempre irrestrita, ou seja, o alpha pode ser qualquer número real, o que admite venda a descoberto (alpha negativo) e alavancagem (a soma dos pesos passando de 1), sem nenhum teto. Não existe opção para exigir carteira só comprada nem para impor limites. No caso de um ativo só, o `brentq` começa procurando no intervalo de -20 a 20 e vai dobrando esse intervalo até a função G trocar de sinal. Se ela nunca trocar, quer dizer que todos os cenários ficam do mesmo lado da taxa livre de risco (nenhum abaixo dela, ou nenhum acima), então não há alpha ótimo finito e a função levanta um `RuntimeError`. Os cenários vão para o `brentq` pelo `args`, e não dentro de um `lambda`: o `brentq` embrulha a função numa outra que aponta para si mesma, e um `lambda` com o `R` dentro deixaria a matriz de cenários (305 MB com 40 milhões) presa na memória até o coletor de ciclos do Python passar. Num laço de muitas resoluções, como o das sementes do notebook 20, isso esgotava a memória.
 
 O caminho de dois ativos ou mais faz o mesmo: se o SLSQP não convergir, a função levanta `RuntimeError` com a mensagem do otimizador e não devolve o último ponto visitado. Um alpha que não resolve a FOC seguiria pela esteira sem nenhum aviso, e o erro só apareceria no resultado final.
 
@@ -358,16 +361,16 @@ Além do `n_scenarios`, dois outros controles da simulação têm valor padrão:
 
 O resultado traz também o `consumo_por_ano`, com o consumo médio já somado dentro de cada ano do horizonte e dividido por `w0`, de modo que ele sai como fração da riqueza inicial para qualquer W_0. A soma fica na esteira, e não em quem exibe, para que a linha de comando e a figura leiam o mesmo número. O consumo terminal `c_T` fica fora dela: ele é a liquidação de toda a riqueza que sobrou (theta_T = 1), e não um fluxo anual comparável com os outros. Quando o horizonte não fecha um número inteiro de anos, o último balde sai parcial.
 
-O número de cenários (`n_scenarios`) precisa de atenção, porque depende da frequência dos dados. Quando ele não vem no config, o padrão sai da própria frequência: 200 mil para séries mensais e 4 milhões para séries diárias. A base diária precisa de muito mais porque o excesso de retorno de um pregão é pequeno perto do seu desvio-padrão, e com poucos cenários o alpha* oscila bastante de uma rodada para outra. O `app.__main__` usa esses mesmos valores.
+O número de cenários (`n_scenarios`) precisa de atenção, porque depende da frequência dos dados. Quando ele não vem no config, o padrão sai da própria frequência: 200 mil para séries mensais e 4 milhões para séries diárias. A base diária precisa de muito mais porque o excesso de retorno de um pregão é pequeno perto do seu desvio-padrão, e com poucos cenários o alpha* oscila bastante de uma rodada para outra. O `app.__main__` usa esses mesmos valores. Os números do artigo usam 40 milhões (`--n-scenarios 40000000`), e o notebook 20 mostra o que isso muda: em 100 sementes, o desvio-padrão do alpha* é de 0,0097 com 4 milhões de cenários e de 0,0030 com 40 milhões.
 
 ### `app.graficos`: Figuras dos resultados (F15)
 
-Gera em `results/` as nove figuras usadas no documento: a curva G(alpha) com a raiz marcada, o alpha ótimo contra gamma, contra o retorno esperado mu e contra a volatilidade sigma, as frações de consumo, a fração consumida no primeiro período contra beta e contra o prêmio de risco (uma curva por gamma), a trajetória da riqueza e o consumo somado por ano. As cinco de sensibilidade são a versão em figura dos testes do F12. As de mu e de sigma refazem a otimização nos mesmos cenários da estimativa do alpha, deslocados (para mudar a média) ou esticados em torno da média (para mudar o desvio), e assim a diferença entre um ponto e outro vem só do parâmetro que mudou. A de beta só refaz a recorrência do A_t, porque nem o alpha nem o Phi dependem do beta. A do prêmio de risco desloca os mesmos cenários para que a média fique em R_f mais o prêmio, de zero a 8 pontos percentuais ao ano, e refaz a carteira e o Phi para gamma igual a 0,5, 1, 2 e 5. Cada curva mostra quanto o theta_0 varia desde o prêmio zero, onde a carteira ótima é só CDI: com gamma > 1 ele sobe, com gamma < 1 cai e com gamma = 1 não muda. O prêmio começa em zero porque, abaixo disso, a carteira ótima vende a descoberto e as oportunidades de investimento também melhoram, e o efeito deixaria de ser monotônico. A da riqueza tem dois painéis: em cima a média com a faixa entre os percentis 5 e 95, e embaixo a largura dessa faixa em porcentagem da média, que é o que mostra a dispersão crescendo. No painel de cima, em escala log, ela passaria despercebida.
+Gera em `results/` as nove figuras usadas no documento: a curva G(alpha) com a raiz marcada, o alpha ótimo contra gamma, contra o retorno esperado mu e contra a volatilidade sigma, as frações de consumo, a fração consumida no primeiro período contra beta e contra o prêmio de risco (uma curva por gamma), a trajetória da riqueza e o consumo somado por ano. As cinco de sensibilidade são a versão em figura dos testes do F12. As de mu e de sigma refazem a otimização nos mesmos cenários da estimativa do alpha, deslocados (para mudar a média) ou esticados em torno da média (para mudar o desvio), e assim a diferença entre um ponto e outro vem só do parâmetro que mudou. A de beta só refaz a recorrência do A_t, porque nem o alpha nem o Phi dependem do beta. A do prêmio de risco desloca os mesmos cenários para que a média fique em R_f mais o prêmio, de zero a 8 pontos percentuais ao ano, e refaz a carteira e o Phi para gamma igual a 0,5, 1, 2 e 5. Cada curva mostra quanto o theta_0 varia desde o prêmio zero, onde a carteira ótima é só CDI: com gamma > 1 ele sobe, com gamma < 1 cai e com gamma = 1 não muda, como em Merton (1969). O prêmio começa em zero porque, abaixo disso, a carteira ótima vende a descoberto e as oportunidades de investimento também melhoram, e o efeito deixaria de ser monotônico. A da riqueza tem dois painéis: em cima a média com a faixa entre os percentis 5 e 95, e embaixo a largura dessa faixa em porcentagem da média, que mostra a dispersão crescendo. No painel de cima, em escala log, ela passaria despercebida.
 
 ```python
 def montar_rodape(res, cfg, periodo, n_obs, beta_anual, anos, unidade,
                   dados_reais=True) -> str:
-    """Texto de procedência (duas linhas) impresso em todas as figuras."""
+    """Texto com a origem dos dados e os parâmetros (duas linhas), impresso em todas as figuras."""
 
 def gerar(res, mercado, rf, cfg, rodape,
           destino="results") -> list[str]:
@@ -380,11 +383,13 @@ O matplotlib fica isolado. O `app.principal` não importa este módulo, e no `__
 
 Cada PNG leva no rodapé as informações da rodada que o gerou, em duas linhas. A de cima diz de onde vieram os números: a série, se a base é real ou sintética, a janela e o número de observações, e o R_f anualizado com a sua origem (`série CDI` ou `informado`, conforme a flag `--cdi-anual` tenha sido usada ou não). A de baixo traz os parâmetros: gamma, beta (ao ano e por período), T, W_0, o `n_scenarios`, o `n_paths` e a semente, terminando no alpha ótimo. Com isso a figura sozinha basta para refazer a rodada.
 
-Marcar se a base é real ou sintética importa porque a série de demonstração usa datas plausíveis; sem essa marca, uma figura gerada sem banco ficaria indistinguível de uma gerada com dados do Yahoo e do Banco Central. Só que o rodapé sozinho não basta: como o nome do arquivo é o mesmo nos dois casos, uma rodada sem banco sobrescreveria as figuras de dados reais que o texto referencia. Por isso o destino também muda, com as figuras de dados reais indo para `results/` e as da base sintética para `results/sinteticos/`. As figuras ficam versionadas no repositório, porque o texto se refere a elas.
+A quebra em duas linhas tem um motivo prático. Em uma linha só o texto passava de 7 polegadas, que é a largura das figuras, e como o `savefig` usa `bbox_inches="tight"` o excesso não era cortado: o PNG saía mais largo, e cada figura acabava com uma dimensão diferente.
 
-Cinco desses gráficos voltam a usar os cenários de Monte Carlo e por isso custam tempo. O do G(alpha) só reavalia a condição de primeira ordem, em 60 pontos; os outros quatro refazem a otimização: os de alpha contra gamma, mu e sigma, em 8, 7 e 5 valores, e o do consumo contra o prêmio de risco, em 20 (quatro valores de gamma vezes cinco prêmios). Sobre os 4 milhões de cenários da base diária, `python -m app --diario --graficos` leva cerca de 1 minuto de ponta a ponta, e a esteira sozinha, sem figuras, poucos segundos. Na base mensal, com 200 mil cenários, o custo é uma fração disso.
+Marcar se a base é real ou sintética importa porque a série de demonstração usa datas plausíveis; sem essa marca, uma figura gerada sem banco ficaria indistinguível de uma gerada com dados do Yahoo e do Banco Central. Só que o rodapé sozinho não basta: como o nome do arquivo é o mesmo nos dois casos, uma rodada sem banco sobrescreveria as figuras de dados reais que o texto referencia. Por isso o destino também muda, com as figuras de dados reais indo para `results/` e as da base sintética para `results/sinteticos/`. Guardar a origem dos dados num arquivo de metadados separado seria outra saída, mas aí seria fácil o arquivo ficar para trás; com a legenda na própria imagem, ela acompanha a figura quando vai para dentro do documento. As figuras ficam versionadas no repositório, porque o texto se refere a elas.
 
-Esta é, de longe, a etapa mais cara da aplicação, e é por isso que ela fica fora do limite do NF1: os 60 segundos de lá valem para os algoritmos do modelo, e desenhar um gráfico não é um deles. Quem precisar apertar esse tempo tem por onde: as cinco figuras caras não precisam dos 4 milhões de cenários que a estimativa do alpha pede, e um teto de algumas centenas de milhares mudaria a curva só na terceira ou quarta casa decimal.
+Cinco desses gráficos voltam a usar os cenários de Monte Carlo e por isso custam tempo. O do G(alpha) só reavalia a condição de primeira ordem, em 60 pontos; os outros quatro refazem a otimização: os de alpha contra gamma, mu e sigma, em 8, 7 e 5 valores, e o do consumo contra o prêmio de risco, em 20 (quatro valores de gamma vezes cinco prêmios). Sobre os 4 milhões de cenários da base diária, `python -m app --diario --graficos` leva cerca de 1 minuto de ponta a ponta, e a esteira sozinha, sem figuras, poucos segundos. Com os 40 milhões do artigo, que são os das figuras versionadas em `results/`, leva por volta de dez vezes isso. Na base mensal, com 200 mil cenários, o custo é uma fração de um minuto.
+
+Esta é a etapa mais cara da aplicação, e por isso fica fora do limite do NF1: os 60 segundos de lá valem para os algoritmos do modelo, e desenhar um gráfico não é um deles. Quem precisar apertar esse tempo tem por onde: as cinco figuras caras não precisam dos milhões de cenários que a estimativa do alpha pede, e um teto de algumas centenas de milhares mudaria a curva só na terceira ou quarta casa decimal.
 
 ---
 
@@ -392,7 +397,7 @@ Esta é, de longe, a etapa mais cara da aplicação, e é por isso que ela fica 
 
 <!--Descrever o algoritmo implementado em cada função-->
 
-Situação atual: os algoritmos das Etapas 0 a 7 estão implementados e testados, com os notebooks de `tests/` organizados por requisito (o cabeçalho de cada um diz quais requisitos ele cobre). A validação com o QuantEcon está no `tests/18_algoritmo_quantecon.ipynb`, que refaz a solução por programação dinâmica, com quadratura (`qnwnorm`) nas esperanças e `minimize_scalar` nas decisões, e confere o alpha, as frações de consumo e a função valor da aplicação.
+Situação atual: os algoritmos das Etapas 0 a 7 estão implementados e testados, com os notebooks de `tests/` organizados por requisito. A validação com o QuantEcon está no `tests/18_algoritmo_quantecon.ipynb`, que refaz a solução por programação dinâmica, com quadratura (`qnwnorm`) nas esperanças e `minimize_scalar` nas decisões, e confere o alpha, as frações de consumo e a função valor da aplicação. Os números citados no artigo saem do `tests/20_numeros_do_artigo.ipynb`: as estatísticas e os testes da amostra, feitos com o statsmodels (que o `app/` não usa), a rodada principal com 40 milhões de cenários, as 100 sementes com 4 e com 40 milhões e as figuras `diagnostico_retornos.png` e `alpha_sementes.png`, que ele grava em `article/figs/`. Os 20 notebooks também rodam na integração contínua do GitHub (`.github/workflows/testes.yml`), descrita no README.
 
 1. Calibração (Etapa 0). As funções `media` e `covariancia` calculam os estimadores amostrais em cima dos retornos. A taxa livre de risco vem do CDI: por padrão, da média da coluna `cdi` dos dados, que já está na frequência da base; se o usuário informar um CDI anual (`--cdi-anual`), é esse valor que vale, convertido para o período pela `RendaFixa`.
 2. Carteira ótima (Etapa 1). A função `resolver_alpha_otimo` maximiza J(alpha) = E[u(R_p)] resolvendo a condição de primeira ordem G(alpha) = 0. Para dois ativos ou mais usa o SLSQP; para um ativo só usa o `brentq`. As esperanças são calculadas por Monte Carlo sobre cenários sorteados de uma normal com a média e a covariância estimadas. O alpha é sempre irrestrito, admitindo venda a descoberto e alavancagem, sem teto. Isso é resolvido uma vez só, por causa da miopia.
@@ -401,4 +406,4 @@ Situação atual: os algoritmos das Etapas 0 a 7 estão implementados e testados
 5. Simulação para a frente (Etapas 5 e 6). A função `propagar_riqueza` faz, em cada período, o consumo `c_t* = theta_t * W_t`, investe o que sobrou seguindo o alpha ótimo e propaga a riqueza para o período seguinte.
 6. Validação (Etapa 7). A esteira avalia a função valor `V_t(W_t)` em cada trajetória simulada e devolve, por período, as médias de `V_t(W_t)` e de `u(c_t)`. O teste do F11 confere que, para todo t, a utilidade esperada acumulada até t somada ao valor de continuação descontado reproduz `V_0(W_0)`; em t = T, isso quer dizer que a política simulada entrega a utilidade que a função valor promete. A tolerância é de 2%, por causa do erro de Monte Carlo. Fora da Etapa 7, o F12 testa as respostas de alpha* e theta_t a gamma, mu, sigma e beta, e a do theta_0 ao prêmio de risco, cujo sinal depende de gamma, sempre sobre a mesma amostra de cenários.
 
-As Etapas 3 e 7 também aparecem no resultado final: os coeficientes `A_t` da recorrência e as médias `trajetoria_V_media` e `trajetoria_u_media` (requisito F11). Antes esses dois ficavam escondidos dentro do agente e eram descartados no fim. A simulação devolve, além da média, os percentis período a período (`trajetoria_W_p5`, `_mediana` e `_p95`), que são necessários para desenhar a faixa entre os percentis 5 e 95 nas figuras de `results/`, e o `consumo_por_ano`, que a linha de comando imprime e a figura de barras desenha a partir do mesmo número.
+As Etapas 3 e 7 também aparecem no resultado final: os coeficientes `A_t` da recorrência e as médias `trajetoria_V_media` e `trajetoria_u_media` (requisito F11). A simulação devolve, além da média, os percentis período a período (`trajetoria_W_p5`, `_mediana` e `_p95`), que são necessários para desenhar a faixa entre os percentis 5 e 95 nas figuras de `results/`, e o `consumo_por_ano`, que a linha de comando imprime e a figura de barras desenha a partir do mesmo número.
