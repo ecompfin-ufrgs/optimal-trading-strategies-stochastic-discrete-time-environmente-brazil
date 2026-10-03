@@ -49,16 +49,16 @@ def montar_base(db_path: str | None = None, inicio: str = "2000-01-01",
         db_path = BANCO_PADRAO[frequencia]
     os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
 
-    # 1. o Ibovespa, que sao os niveis do indice (tabela 'ibovespa')
+    # o Ibovespa, que sao os niveis do indice (tabela 'ibovespa')
     precos = dal.baixar_precos(["^BVSP"], inicio, fim, frequencia=frequencia)
     precos = precos.rename(columns={precos.columns[1]: "fechamento"})
     dal.gravar_sqlite(precos, db_path, "ibovespa")
 
-    # 2. o CDI, que ja e uma taxa por periodo (tabela 'cdi')
+    # o CDI, que ja e uma taxa por periodo (tabela 'cdi')
     cdi = dal.baixar_cdi_bcb(inicio, fim, frequencia=frequencia)
     dal.gravar_sqlite(cdi, db_path, "cdi")
 
-    # 3. os retornos alinhados por data (tabela 'retornos').
+    # os retornos alinhados por data (tabela 'retornos')
     ret_ibov = dal.calcular_retornos(precos.rename(columns={"fechamento": "ibov"}))
     retornos = ret_ibov.merge(cdi, on="data", how="inner")
     if retornos.empty:
