@@ -19,7 +19,7 @@ from app import dal, nucleo
 from app.agente import Investidor
 from app.mercado import RendaFixa, RendaVariavel
 
-# Fator de desconto ANUAL padrao.
+# Fator de desconto anual padrao.
 # Fica declarado ao ano porque "beta = 0.96" sozinho nao diz a que periodo se
 # refere. Lido como valor por pregao, vira 0.96 elevado a 252, quase zero, e o
 # investidor consumiria quase tudo no primeiro ano.
@@ -70,16 +70,15 @@ def executar_pipeline(config: dict) -> dict:
     O que volta: um dicionario com alpha_star (a carteira otima), theta e
     consumo_inicial, phi_hat, A_t (Etapa 3), a calibracao (mu_hat, sigma_hat e
     rf) e o resumo da simulacao, com E_W_T, os percentis de W_T (W_T_p5 e
-    W_T_p95) e as trajetorias
-    trajetoria_W_media, _mediana, _p5, _p95 e trajetoria_c_media, mais o
-    consumo_por_ano ja somado dentro de cada ano e dividido por w0, que e a
-    fracao da riqueza inicial consumida no ano.
+    W_T_p95) e as trajetorias trajetoria_W_media, _mediana, _p5, _p95 e
+    trajetoria_c_media, mais o consumo_por_ano ja somado dentro de cada ano e
+    dividido por w0, que e a fracao da riqueza inicial consumida no ano.
     """
     cfg = dict(config)
     coluna_data = cfg.get("coluna_data", "data")
     rf_col = cfg.get("rf_col", "cdi")
 
-    # 0. a frequencia, que da a unidade de tempo de todo o resto
+    # a frequencia da a unidade de tempo de todo o resto
     if "periodos_por_ano" not in cfg:
         raise ValueError(
             "falta 'periodos_por_ano' no config (12 se mensal, 252 se diario). "
@@ -90,7 +89,7 @@ def executar_pipeline(config: dict) -> dict:
     if ppa <= 0:
         raise ValueError(f"'periodos_por_ano' deve ser positivo; veio {ppa!r}.")
 
-    # 1. dal: pegar os retornos
+    # os retornos, do DataFrame ou do banco
     if cfg.get("retornos") is not None:
         retornos = cfg["retornos"]
     elif "db_path" in cfg:
@@ -103,7 +102,7 @@ def executar_pipeline(config: dict) -> dict:
     if not ativos:
         raise ValueError("nenhum ativo de risco identificado em 'retornos'.")
 
-    # 2. mercado: a calibracao (Etapa 0)
+    # calibracao do mercado (Etapa 0)
     if "cdi_anual" in cfg:
         rf = RendaFixa(cfg["cdi_anual"], ppa).retorno_livre_risco()
     elif rf_col in retornos.columns:
@@ -112,14 +111,14 @@ def executar_pipeline(config: dict) -> dict:
         rf = float(cfg.get("rf", 0.0))
     mercado = RendaVariavel(retornos[[coluna_data] + ativos], coluna_data=coluna_data)
 
-    # 3. agente: a politica otima (Etapas 1 a 4)
+    # politica otima do investidor (Etapas 1 a 4)
     if "horizonte" not in cfg:
         raise ValueError(
             "falta 'horizonte' no config (o T, contado em periodos). Nao tem "
             "padrao porque 60 periodos e 5 anos no mensal e uns 3 meses no diario."
         )
     if "beta" in cfg and "beta_anual" in cfg:
-        raise ValueError("use 'beta' (por periodo) OU 'beta_anual', nao os dois.")
+        raise ValueError("use 'beta' (por periodo) ou 'beta_anual', nao os dois.")
     beta = (float(cfg["beta"]) if "beta" in cfg
             else float(cfg.get("beta_anual", BETA_ANUAL_PADRAO)) ** (1.0 / ppa))
     inv = Investidor(cfg.get("gamma", 5.0), beta,
@@ -129,14 +128,14 @@ def executar_pipeline(config: dict) -> dict:
     alpha = inv.carteira_otima(mercado, rf, n_scenarios=n_scenarios, seed=seed)
     theta = inv.fracoes_consumo()
 
-    # 4. simulacao pra frente (Etapas 5 e 6)
+    # simulacao pra frente (Etapas 5 e 6)
     T, N = inv.horizonte, len(ativos)
     n_paths = cfg.get("n_paths", 5_000)
     r_paths = mercado.amostrar(n_paths * T, seed=seed + 1)
     R_paths = np.maximum(1.0 + r_paths.reshape(n_paths, T, N), 0.0)
     sim = nucleo.propagar_riqueza(inv.w0, theta, alpha, R_paths, 1.0 + rf)
 
-    # 5. o resultado
+    # o que a esteira devolve
     W_T = sim["W"][:, -1]
     A_t = inv.coeficientes_A
     B_t = (nucleo.recorrencia_B(A_t, inv.phi_hat, beta)
