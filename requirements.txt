@@ -1,9 +1,17 @@
 # Bibliotecas usadas no projeto (modelo de Samuelson, 1969).
-#   pip install -r requirements.txt
+#
 
 numpy==2.2.6
 pandas==2.2.3
 scipy==1.15.3
 
+# usado no notebook 18, que confere o resultado por programacao dinamica
+quantecon==0.11.2
+numba==0.61.2          # ja vem junto com o quantecon, mas fica aqui pra prender a versao
+
 # so pros graficos (python -m app --graficos); o resto do programa nao usa
 matplotlib==3.10.1
+
+# usado no notebook 20, nas estatisticas e na figura dos dados do artigo;
+# o app/ nao usa
+statsmodels==0.14.4
