@@ -93,7 +93,7 @@ Isso escreve nove figuras em `results/`, na mesma execução do modelo. As que e
 
 Sem a flag nenhum arquivo é escrito. Isso é de propósito: dá para ficar testando `--gamma`, `--anos` e `--beta-anual` à vontade sem sobrescrever as figuras que o texto do trabalho referencia.
 
-No rodapé de cada figura ficam as informações da rodada que gerou ela: qual base, a janela de datas, o R_f, gamma, beta (ao ano e por período), T, W0, a quantidade de cenários e de trajetórias, a semente e o alfa ótimo que saiu.
+No rodapé de cada figura ficam as informações da rodada que gerou ela: qual base, a janela de datas, o R_f, gamma, beta (ao ano e por período), T, W0, a quantidade de cenários e de trajetórias, a semente e o alpha ótimo que saiu.
 
 Cinco dessas figuras refazem contas sobre os cenários de Monte Carlo, e o [`projeto.md`](docs/project/projeto.md) explica quais. Na base diária, com os 4 milhões de cenários, a execução com a flag leva cerca de 1 minuto, contra poucos segundos sem ela; com os 40 milhões do artigo, uns dez vezes mais.
 
