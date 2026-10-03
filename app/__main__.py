@@ -56,7 +56,7 @@ def _dados_demo(perfil: dict, n: int = 1_050, seed: int = 7) -> pd.DataFrame:
 
     rng = np.random.default_rng(seed)
     ruido = rng.normal(0.0, perfil["sigma"], n)
-    ruido -= ruido.mean()                       # media exatamente 0
+    ruido -= ruido.mean() # media exatamente 0
     datas = pd.date_range("2022-05-24", periods=n, freq=perfil["freq_pandas"])
     fmt = "%Y-%m-%d" if perfil["periodos_por_ano"] == 252 else "%Y-%m"
     return pd.DataFrame({
@@ -83,11 +83,11 @@ def _analisar(argv) -> argparse.Namespace:
     p.add_argument("--anos", type=float, default=ANOS,
                    help="horizonte de planejamento T, em anos")
     p.add_argument("--beta-anual", type=float, default=BETA_ANUAL,
-                   help="fator de desconto ANUAL (convertido para o periodo)")
+                   help="fator de desconto anual (convertido para o periodo)")
     p.add_argument("--gamma", type=float, default=GAMMA,
                    help="coeficiente de aversao relativa ao risco")
     p.add_argument("--cdi-anual", type=float, default=None,
-                   help="CDI ANUAL em decimal (0.13 = 13%% a.a.), convertido "
+                   help="CDI anual em decimal (0.13 = 13%% a.a.), convertido "
                         "para o periodo; se omitido, usa a media da serie de "
                         "CDI dos dados")
     p.add_argument("--w0", type=float, default=W0, help="riqueza inicial")
@@ -108,8 +108,9 @@ def _analisar(argv) -> argparse.Namespace:
     return args
 
 
-def main(argv=()) -> None:
-    """Executa a esteira com os parametros de ``argv`` e imprime o resultado."""
+def main(argv=()) -> str:
+    """Executa a esteira com os parametros de argv, imprime o resultado e
+    devolve o mesmo texto, que os testes conferem."""
     args = _analisar(list(argv))
     perfil = PERFIS["1d" if args.diario else "1mo"]
     ppa = perfil["periodos_por_ano"]
@@ -127,25 +128,28 @@ def main(argv=()) -> None:
     origem_rf = ("do --cdi-anual" if args.cdi_anual is not None
                  else "da serie de CDI dos dados")
     dados_reais = os.path.exists(perfil["db"])
+    cabecalho = []
     if dados_reais:
-        print(f"(dados REAIS: {perfil['db']} - R_f vem {origem_rf})")
+        cabecalho.append(f"(dados reais: {perfil['db']} - R_f vem {origem_rf})")
         config = {"db_path": perfil["db"], "tabela": "retornos", **comum}
     else:
-        print(f"(SEM banco real -> dados SINTETICOS de demonstracao; "
-              f"R_f vem {origem_rf})")
-        print(f"  para baixar dados reais:  {_comando_ingestao(ppa)}")
+        cabecalho.append(f"(sem banco real -> dados sinteticos de demonstracao; "
+                         f"R_f vem {origem_rf})")
+        cabecalho.append(f"  para baixar dados reais:  {_comando_ingestao(ppa)}")
         config = {"retornos": _dados_demo(perfil), **comum}
+    print("\n".join(cabecalho))
     res = executar_pipeline(config)
 
     rf_a = (1 + res["rf"]) ** ppa - 1
     mu_a = (1 + res["mu_hat"][0]) ** ppa - 1
+    resultado = []
 
     def linha(rotulo: str, valor: str) -> None:
         """Mantem a coluna dos valores alinhada, com 'mes' ou com 'pregao'."""
-        print(f"{rotulo:<22}: {valor}")
+        resultado.append(f"{rotulo:<22}: {valor}")
 
-    print(f"=== Esteira DP-CRRA-IID (Samuelson 1969) - base "
-          f"{'diaria' if args.diario else 'mensal'} ===")
+    resultado.append(f"=== Esteira DP-CRRA-IID (Samuelson 1969) - base "
+                     f"{'diaria' if args.diario else 'mensal'} ===")
     linha("Ativos de risco", f"{res['ativos']}")
     linha(f"R_f ({unid})", f"{res['rf']:.8f}   ({rf_a:.2%} a.a.)")
     linha(f"mu_hat ({unid})", f"{res['mu_hat'][0]:.8f}   ({mu_a:.2%} a.a.)")
@@ -157,12 +161,13 @@ def main(argv=()) -> None:
     linha("theta_T (terminal)", f"{res['theta'][-1]:.4f}")
 
     por_ano = res["consumo_por_ano"]
-    print(f"Consumo por ano (frac. de W_0), horizonte de {args.anos:g} anos:")
+    resultado.append(f"Consumo por ano (frac. de W_0), horizonte de {args.anos:g} anos:")
     for i, total in enumerate(por_ano, start=1):
         parcial = " (ano parcial)" if i == len(por_ano) and T % ppa else ""
-        print(f"   ano {i}: {total:.4f}{parcial}")
+        resultado.append(f"   ano {i}: {total:.4f}{parcial}")
     linha(f"E[W_T] (T={res['horizonte']})",
           f"{res['E_W_T']:.6f}  [P5={res['W_T_p5']:.6f}, P95={res['W_T_p95']:.6f}]")
+    print("\n".join(resultado))
 
     if args.graficos:
         from app import graficos
@@ -183,6 +188,8 @@ def main(argv=()) -> None:
         print(f"Figuras escritas em {destino}/:")
         for caminho in escritos:
             print(f"   {os.path.basename(caminho)}")
+
+    return "\n".join(cabecalho + resultado)
 
 
 if __name__ == "__main__":
