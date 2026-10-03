@@ -48,7 +48,12 @@ def _objetivo_J(alpha, R, rf, gamma):
     return float(u.mean())
 
 
-def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
+def _foc_um_ativo(a, R, rf, gamma):
+    """O G de um ativo so, como numero, que e o que o brentq pede."""
+    return float(funcao_foc(np.array([a]), R, rf, gamma)[0])
+
+
+def resolver_alpha_otimo(R, rf, gamma, tol=1e-10, maxiter=200, alpha0=None):
     """Acha o alpha que zera a condicao de primeira ordem, G()=0. (F6)
 
     Como no projeto, o alpha pode ser qualquer numero: pode ficar negativo
@@ -75,13 +80,12 @@ def resolver_alpha_otimo(R, rf, gamma, *, tol=1e-10, maxiter=200, alpha0=None):
             )
         return res.x.copy()
 
-    # caso de 1 ativo, com brentq. O G so cai, entao procuro G(lo) > 0 > G(hi).
-    g = lambda a: float(funcao_foc(np.array([a]), R, rf, gamma)[0])
+    args = (R, rf, gamma)
     lo = -_INTERVALO_INICIAL
     hi = _INTERVALO_INICIAL
     for _ in range(_MAX_EXPANSOES):
-        if g(lo) > 0 > g(hi):
-            return np.array([optimize.brentq(g, lo, hi, xtol=tol)])
+        if _foc_um_ativo(lo, *args) > 0 > _foc_um_ativo(hi, *args):
+            return np.array([optimize.brentq(_foc_um_ativo, lo, hi, args=args, xtol=tol)])
         lo *= 2.0
         hi *= 2.0
     raise RuntimeError(
@@ -106,7 +110,7 @@ def recorrencia_A(phi, beta, gamma, T):
     if np.isclose(gamma, 1.0):
         # caso gamma=1 (utilidade log): A_t = (1-beta^(T-t+1))/(1-beta), nao usa o phi
         for t in range(T + 1):
-            A[t] = (T - t + 1) if np.isclose(beta, 1.0) else (1 - beta ** (T - t + 1)) / (1 - beta)
+            A[t] = (1 - beta ** (T - t + 1)) / (1 - beta)
         return A
     A[T] = 1.0
     inv_g = 1.0 / gamma
