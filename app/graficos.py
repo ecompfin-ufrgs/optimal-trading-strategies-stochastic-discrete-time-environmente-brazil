@@ -4,9 +4,9 @@ Gera em results/ as ilustracoes usadas no documento. Este modulo fica fora da
 esteira: o app.principal nao importa ele, entao quem so quer o resultado
 numerico nao paga o custo de carregar o matplotlib.
 
-Cada figura leva no rodape a procedencia, em duas linhas: de onde vieram os
-numeros (a serie, se a base e real ou sintetica, a janela e o R_f) e com que
-parametros a rodada foi feita.
+Cada figura leva no rodape duas linhas: de onde vieram os numeros (a serie,
+se a base e real ou sintetica, a janela e o R_f) e com que parametros a
+rodada foi feita.
 
 Uso: python -m app --graficos (os parametros sao os da propria execucao).
 """
@@ -55,13 +55,12 @@ def _salvar(fig, destino: str, nome: str, rodape: str) -> str:
 def montar_rodape(res: dict, cfg: dict, periodo: tuple[str, str], n_obs: int,
                   beta_anual: float, anos: float, unidade: str,
                   dados_reais: bool = True) -> str:
-    """Texto de procedencia impresso em todas as figuras."""
+    """Texto com a origem dos dados e os parametros, impresso em todas as figuras."""
     rf_anual = (1.0 + res["rf"]) ** cfg["periodos_por_ano"] - 1.0
     origem_rf = "informado" if cfg.get("cdi_anual") is not None else "série CDI"
-    fonte = "dados reais" if dados_reais else "dados SINTÉTICOS"
+    fonte = "dados reais" if dados_reais else "dados sintéticos"
     cenarios = f"{cfg['n_scenarios']:,}".replace(",", ".")
     trajetorias = f"{cfg['n_paths']:,}".replace(",", ".")
-
     periodo_beta = "pregão" if cfg["periodos_por_ano"] == 252 else "mês"
     return (f"Ibovespa {unidade} ({fonte}) · {periodo[0]} a {periodo[1]} "
             f"({n_obs} obs) · R_f={rf_anual:.2%} a.a. ({origem_rf})\n"
@@ -98,8 +97,8 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
     G = [nucleo.funcao_foc(np.array([a]), R, Rf, g)[0] for a in grade]
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.axhline(0, color="0.7", lw=0.8)
-    ax.plot(grade, G, color="#1f77b4")
-    ax.plot([a_star], [0], "o", color="#d62728", zorder=5,
+    ax.plot(grade, G, color="C0")
+    ax.plot([a_star], [0], "o", color="C3", zorder=5,
             label=f"α* = {a_star:.4f}")
     ax.set_xlabel("α"); ax.set_ylabel("G(α)")
     ax.set_title("Condição de primeira ordem: G(α) = 0")
@@ -109,7 +108,7 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
     # 2. alpha contra gamma
     alphas = [nucleo.resolver_alpha_otimo(R, Rf, gi)[0] for gi in GRADE_GAMMA]
     fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot(GRADE_GAMMA, alphas, "o-", color="#1f77b4")
+    ax.plot(GRADE_GAMMA, alphas, "o-", color="C0")
     ax.axvline(g, color="0.7", ls="--", lw=0.8)
     ax.set_xlabel("γ (aversão relativa ao risco)"); ax.set_ylabel("α*")
     ax.set_title("Sensibilidade da carteira ótima à aversão ao risco")
@@ -124,7 +123,7 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
                  for m in medias]
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.axhline(0, color="0.7", lw=0.8)
-    ax.plot(100 * medias, alphas_mu, "o-", color="#1f77b4")
+    ax.plot(100 * medias, alphas_mu, "o-", color="C0")
     ax.axvline(100 * mu_anual, color="0.7", ls="--", lw=0.8)
     ax.set_xlabel(r"$\mu$ (retorno esperado, % a.a.)"); ax.set_ylabel(r"$\alpha^*$")
     ax.set_title("Sensibilidade da carteira ótima ao retorno esperado")
@@ -137,7 +136,7 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
                         np.maximum(1.0 + media_r + (r - media_r) * k, 0.0), Rf, g)[0]
                     for k in ESCALAS_SIGMA]
     fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot(100 * sigma_anual * np.array(ESCALAS_SIGMA), alphas_sigma, "o-", color="#1f77b4")
+    ax.plot(100 * sigma_anual * np.array(ESCALAS_SIGMA), alphas_sigma, "o-", color="C0")
     ax.axvline(100 * sigma_anual, color="0.7", ls="--", lw=0.8)
     ax.set_xlabel(r"$\sigma$ (volatilidade, % a.a.)"); ax.set_ylabel(r"$\alpha^*$")
     ax.set_title("Sensibilidade da carteira ótima à volatilidade")
@@ -146,8 +145,8 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
     # 5. as fracoes de consumo ao longo do tempo (F13)
     theta = res["theta"]
     fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot(np.arange(len(theta)), theta, color="#1f77b4")
-    ax.set_yscale("log") 
+    ax.plot(np.arange(len(theta)), theta, color="C0")
+    ax.set_yscale("log")
     ax.set_xlabel("t (períodos)"); ax.set_ylabel(r"$\theta_t$ (escala log)")
     ax.set_title(r"Fração de consumo $\theta_t$ (crescente até $\theta_T = 1$)")
     escritos.append(_salvar(fig, destino, "theta_t.png", rodape))
@@ -157,7 +156,7 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
                    nucleo.recorrencia_A(res["phi_hat"], b ** (1.0 / ppa), g, T), g)[0]
                for b in BETAS_ANUAIS]
     fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot(BETAS_ANUAIS, theta_0, "o-", color="#1f77b4")
+    ax.plot(BETAS_ANUAIS, theta_0, "o-", color="C0")
     ax.axvline(res["beta"] ** ppa, color="0.7", ls="--", lw=0.8)
     ax.set_xlabel(r"$\beta$ (fator de desconto, ao ano)")
     ax.set_ylabel(r"$\theta_0$ (fração consumida em t = 0)")
@@ -190,23 +189,23 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
                       res["trajetoria_W_p95"])
     fig, (ax, ax2) = plt.subplots(2, 1, figsize=(7, 5.4), sharex=True,
                                   gridspec_kw={"height_ratios": [3, 1]})
-    ax.fill_between(t, p5, p95, color="#1f77b4", alpha=0.3, label="P5-P95")
-    ax.plot(t, media, color="#1f77b4", label="média")
+    ax.fill_between(t, p5, p95, color="C0", alpha=0.3, label="P5-P95")
+    ax.plot(t, media, color="C0", label="média")
     ax.set_yscale("log")
     ax.set_ylabel(r"$W_t$ (escala log)")
     ax.set_title("Trajetória da riqueza")
     ax.legend()
 
     largura = 100.0 * (p95 - p5) / np.where(media > 0, media, np.nan)
-    ax2.plot(t, largura, color="#7f7f7f")
+    ax2.plot(t, largura, color="C7")
     ax2.set_xlabel("t (períodos)")
     ax2.set_ylabel("P95-P5\n(% da média)", fontsize=8)
     escritos.append(_salvar(fig, destino, "riqueza_W_t.png", rodape))
 
-    # 9. consumo somado por ano
+    # 9. consumo somado por ano (sem o c_T, que e a liquidacao terminal)
     por_ano = res["consumo_por_ano"]
     fig, ax = plt.subplots(figsize=(7, 4))
-    ax.bar(np.arange(1, len(por_ano) + 1), por_ano, color="#ff7f0e")
+    ax.bar(np.arange(1, len(por_ano) + 1), por_ano, color="C1")
     ax.set_xlabel("ano"); ax.set_ylabel(r"consumo (fração de $W_0$)")
     ax.set_title("Consumo agregado por ano")
     escritos.append(_salvar(fig, destino, "consumo_por_ano.png", rodape))
