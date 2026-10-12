@@ -177,7 +177,7 @@ def gerar(res: dict, mercado, rf: float, cfg: dict, rodape: str,
             theta_p.append(nucleo.fracoes_consumo(A_p, gi)[0])
         ax.plot(100 * np.array(PREMIOS_ANUAIS), 100 * (np.array(theta_p) / theta_p[0] - 1.0),
                 "o-", label=rf"$\gamma$ = {gi:g}")
-    ax.set_xlabel(r"prêmio de risco $\mu - R_f$ (p.p. ao ano)")
+    ax.set_xlabel("prêmio de risco (p.p. ao ano)")
     ax.set_ylabel(r"variação de $\theta_0$ desde o prêmio zero (%)", fontsize=9)
     ax.set_title("Efeito do prêmio de risco sobre a fração de consumo")
     ax.legend()
