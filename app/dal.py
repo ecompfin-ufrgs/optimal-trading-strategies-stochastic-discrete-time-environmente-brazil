@@ -86,7 +86,7 @@ def baixar_precos(
     O campo lido e o 'close' da API, o fechamento sem ajuste. Para o ^BVSP da
     no mesmo, porque indice de pontos nao paga dividendo nem desdobra.
 
-    Usa a API publica de graficos do Yahoo com o urllib, que ja vem no Python.
+    Acessa o Yahoo Finance com o urllib, que ja vem no Python.
     Cheguei aqui porque o yfinance e o curl_cffi davam erro de certificado SSL
     no Windows.
     """
