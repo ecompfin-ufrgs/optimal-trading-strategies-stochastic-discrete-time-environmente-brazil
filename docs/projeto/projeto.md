@@ -8,7 +8,7 @@
 
 São duas séries históricas, uma para cada mercado. A frequência pode ser mensal, que é o padrão tanto da ingestão (`python -m app.ingestao`) quanto da execução (`python -m app`), ou diária, pedida com `--diario` nas duas pontas. Cada frequência tem o seu banco, e a execução lê o banco da frequência que foi pedida:
 
-- Renda variável: o Ibovespa (`^BVSP`), usando o nível do índice. Os dados vêm do Yahoo Finance, pela API pública de gráficos, acessada com o `urllib`.
+- Renda variável: o Ibovespa (`^BVSP`), usando o nível do índice. Os dados vêm do Yahoo Finance, acessado com o `urllib`.
 - Renda fixa: o CDI, que faz o papel da taxa livre de risco `R_f`. Os dados vêm da API do Banco Central. Quando a base é mensal usa-se a série SGS 4391, que já vem acumulada no mês em % ao mês; quando é diária, a série 12, em % ao dia.
 
 ### Fluxo (transformação) dos dados
